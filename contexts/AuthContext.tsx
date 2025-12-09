@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../services/supabaseService';
+import { supabase, isSupabaseConfigured } from '../services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 import { UserProfile } from '../types';
 
@@ -55,28 +55,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchProfile = async (userId: string, currentSession?: Session | null) => {
     try {
-      // Primary: fetch via client (uses RLS)
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      if (!error && data) {
-        setProfile(data as UserProfile);
-        return;
-      }
-
-      // Fallback: use serverless endpoint with service role to bypass RLS / missing row issues
       const token = currentSession?.access_token || session?.access_token;
       if (!token) {
-        console.warn('No access token available to re-fetch profile');
+        console.warn('No access token available to fetch profile');
+        setLoading(false);
         return;
       }
 
-      const res = await fetch('/api/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // Preferred: service endpoint (avoids RLS recursion issues)
+      const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
 
       if (res.ok) {
         const { profile: profileFromApi } = await res.json();
@@ -84,8 +71,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(profileFromApi as UserProfile);
           return;
         }
-      } else {
-        console.warn('Profile fallback endpoint failed', await res.text());
+      } else if (res.status !== 404) {
+        console.warn('Profile endpoint failed', await res.text());
+      }
+
+      // Fallback: direct select only if configured, swallow recursion errors
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (!error && data) {
+          setProfile(data as UserProfile);
+          return;
+        }
+
+        if (error && !`${error.message}`.toLowerCase().includes('infinite recursion')) {
+          console.warn('Could not fetch profile via client', error);
+        }
       }
     } catch (e) {
       console.error(e);

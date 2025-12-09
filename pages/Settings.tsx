@@ -117,16 +117,27 @@ const Settings: React.FC = () => {
   };
 
   const handleAddAccount = async () => {
-    if (!newAccount.name || !newAccount.private_key) return alert("Fill all fields.");
+    if (!newAccount.name || !newAccount.private_key || !newAccount.issuer_id || !newAccount.key_id) {
+      return alert("Fill all fields.");
+    }
     setSaving(true);
-    const { error } = await supabase.from('apple_accounts').insert(newAccount);
-    if (error) alert("Error: " + error.message);
-    else {
+    try {
+      const res = await axios.post('/api/admin',
+        { action: 'add_account', account: newAccount },
+        { headers: { Authorization: `Bearer ${session?.access_token}` } }
+      );
+      if (res.data.success) {
         setNewAccount({ name: '', issuer_id: '', key_id: '', private_key: '' });
         setIsAddingAccount(false);
         loadAccounts();
+      } else {
+        alert(res.data.error || "Error adding account.");
+      }
+    } catch (e: any) {
+      alert(e.response?.data?.error || e.message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleDeleteAccount = async (id: number) => {

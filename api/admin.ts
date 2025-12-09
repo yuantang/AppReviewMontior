@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. Route Action
-  const { action, accountId } = req.body;
+  const { action, accountId, account } = req.body;
 
   try {
       if (action === 'test_connection') {
@@ -36,6 +36,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } 
       else if (action === 'list_apps_from_apple') {
           return await handleListApps(res, accountId);
+      }
+      else if (action === 'add_account') {
+          return await handleAddAccount(res, account);
       }
       else {
           return res.status(400).json({ error: 'Invalid action' });
@@ -82,4 +85,24 @@ async function handleListApps(res: VercelResponse, accountId: number) {
 
     const apps = await fetchAppsList(token);
     return res.status(200).json({ success: true, apps });
+}
+
+async function handleAddAccount(res: VercelResponse, account: any) {
+    if (!account?.name || !account?.issuer_id || !account?.key_id || !account?.private_key) {
+        return res.status(400).json({ error: 'Missing account fields' });
+    }
+
+    const { error } = await supabase.from('apple_accounts').insert({
+        name: account.name,
+        issuer_id: account.issuer_id,
+        key_id: account.key_id,
+        private_key: account.private_key,
+        vendor_number: account.vendor_number || null
+    });
+
+    if (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ success: true });
 }
