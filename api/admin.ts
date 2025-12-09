@@ -1,32 +1,43 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService';
 
-// Initialize Supabase Client
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-
-if (!supabaseUrl || !serviceKey) {
-  throw new Error('Supabase credentials are missing for api/admin (require SUPABASE_URL/VITE_SUPABASE_URL and SUPABASE_SERVICE_KEY)');
-}
-
-const supabase = createClient(supabaseUrl, serviceKey);
+// Lazy supabase init to avoid crashing route on missing envs; return clear 500 instead.
+let supabase: SupabaseClient | null = null;
+const getSupabase = () => {
+  if (supabase) return supabase;
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    return null;
+  }
+  supabase = createClient(supabaseUrl, serviceKey);
+  return supabase;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const client = getSupabase();
+  if (!client) {
+    return res.status(500).json({
+      error: 'Supabase env missing',
+      details: 'Require SUPABASE_SERVICE_KEY and SUPABASE_URL (or VITE_SUPABASE_URL)'
+    });
+  }
+
   // 1. Auth Check (Admin Only)
   const authHeader = req.headers['authorization'];
   if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing authorization' });
   }
   const token = authHeader.split(' ')[1];
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  const { data: { user }, error: authError } = await client.auth.getUser(token);
   
   if (authError || !user) {
       return res.status(401).json({ error: 'Invalid token', details: authError?.message });
   }
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role !== 'admin') {
       return res.status(403).json({ error: 'Admins only' });
   }
@@ -42,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return await handleListApps(res, accountId);
       }
       else if (action === 'add_account') {
-          return await handleAddAccount(res, account);
+          return await handleAddAccount(res, account, client);
       }
       else {
           return res.status(400).json({ error: 'Invalid action' });
@@ -55,7 +66,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function getAccountCredentials(accountId: number) {
-    const { data: account, error } = await supabase.from('apple_accounts').select('*').eq('id', accountId).single();
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase env missing');
+    const { data: account, error } = await client.from('apple_accounts').select('*').eq('id', accountId).single();
     if (error || !account) throw new Error("Account not found");
     return account;
 }
@@ -91,12 +104,12 @@ async function handleListApps(res: VercelResponse, accountId: number) {
     return res.status(200).json({ success: true, apps });
 }
 
-async function handleAddAccount(res: VercelResponse, account: any) {
+async function handleAddAccount(res: VercelResponse, account: any, client: SupabaseClient) {
     if (!account?.name || !account?.issuer_id || !account?.key_id || !account?.private_key) {
         return res.status(400).json({ error: 'Missing account fields' });
     }
 
-    const { error } = await supabase.from('apple_accounts').insert({
+    const { error } = await client.from('apple_accounts').insert({
         name: account.name,
         issuer_id: account.issuer_id,
         key_id: account.key_id,

@@ -1,6 +1,6 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { GoogleGenAI } from "@google/genai";
 import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService';
@@ -13,7 +13,13 @@ if (!supabaseUrl || !serviceKey) {
   throw new Error('Supabase credentials missing: require SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_SERVICE_KEY');
 }
 
-const supabase = createClient(supabaseUrl, serviceKey);
+let supabase: SupabaseClient | null = null;
+const getSupabase = () => {
+  if (supabase) return supabase;
+  if (!supabaseUrl || !serviceKey) return null;
+  supabase = createClient(supabaseUrl, serviceKey);
+  return supabase;
+};
 
 // AI client is optional; when missing, we fall back to neutral
 const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -55,6 +61,14 @@ const sendNotification = async (webhookUrl: string | undefined, review: any, app
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const client = getSupabase();
+  if (!client) {
+    return res.status(500).json({
+      error: 'Supabase env missing',
+      details: 'Require SUPABASE_SERVICE_KEY and SUPABASE_URL (or VITE_SUPABASE_URL)'
+    });
+  }
+
   // --- Security Check ---
   const cronSecret = process.env.CRON_SECRET;
   const isCronAuthorized = (!!cronSecret && (req.headers['authorization'] === `Bearer ${cronSecret}`)) || (req.query.key === cronSecret);
@@ -64,9 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authHeader = req.headers['authorization'];
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      const { data: { user } } = await supabase.auth.getUser(token);
+      const { data: { user } } = await client.auth.getUser(token);
       if (user) {
-         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+         const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).single();
          if (profile?.role === 'admin') isAdmin = true;
       }
     }
@@ -82,14 +96,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("🚀 Starting Multi-Account Sync...");
     
     // 1. Load Global Settings
-    const { data: settings, error: settingsError } = await supabase.from('settings').select('*').single();
+    const { data: settings, error: settingsError } = await client.from('settings').select('*').single();
     if (settingsError) {
       throw new Error(`Failed to load settings: ${settingsError.message}`);
     }
     const webhookUrl = settings?.webhook_url;
 
     // 2. Fetch All Developer Accounts
-    const { data: accounts, error: accountsError } = await supabase.from('apple_accounts').select('*');
+    const { data: accounts, error: accountsError } = await client.from('apple_accounts').select('*');
     if (accountsError) {
       throw new Error(`Failed to load apple_accounts: ${accountsError.message}`);
     }
@@ -111,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
 
             // B. Fetch Apps linked to this account
-            const { data: apps } = await supabase.from('apps').select('*').eq('account_id', account.id);
+            const { data: apps } = await client.from('apps').select('*').eq('account_id', account.id);
             if (!apps || apps.length === 0) continue;
 
             // C. Sync Reviews for these apps
@@ -125,7 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         const reviewId = item.id;
                         
                         // Check if exists
-                        const { data: existing } = await supabase.from('reviews').select('id, is_edited').eq('review_id', reviewId).single();
+                        const { data: existing } = await client.from('reviews').select('id, is_edited').eq('review_id', reviewId).single();
                         if (existing && !existing.is_edited) continue;
 
                         stats.new++;
@@ -148,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                             updated_at: new Date().toISOString()
                         };
 
-                        await supabase.from('reviews').upsert(reviewData, { onConflict: 'review_id' });
+                        await client.from('reviews').upsert(reviewData, { onConflict: 'review_id' });
 
                         if (!existing && reviewData.rating <= (settings?.notify_threshold || 2)) {
                              await sendNotification(webhookUrl, reviewData, app.name);
@@ -160,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
             // Log Success for Account
-            await supabase.from('sync_logs').insert({
+            await client.from('sync_logs').insert({
               account_id: account.id,
               status: 'success',
               new_reviews_count: accountNewCount,
@@ -171,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error(`Failed to process account ${account.name}`, accErr);
             stats.errors++;
             // Log Failure for Account
-            await supabase.from('sync_logs').insert({
+            await client.from('sync_logs').insert({
               account_id: account.id,
               status: 'failed',
               message: accErr?.message || 'Unknown error'
