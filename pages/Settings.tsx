@@ -54,6 +54,17 @@ const Settings: React.FC = () => {
   }, [activeTab]);
 
   // --- LOADERS ---
+  const normalizeError = (err: any) => {
+    if (!err) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    if (err.message && typeof err.message === 'string') return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  };
+
   const loadSettings = async () => {
     setLoading(true);
     const { data } = await supabase.from('settings').select('*').single();
@@ -131,14 +142,16 @@ const Settings: React.FC = () => {
         setIsAddingAccount(false);
         loadAccounts();
       } else {
-        const errMsg = typeof res.data.error === 'string' 
-          ? res.data.error 
-          : JSON.stringify(res.data.error || 'Error adding account.');
-        alert(errMsg);
+        alert(normalizeError(res.data.error || 'Error adding account.'));
       }
     } catch (e: any) {
-      const errMsg = e.response?.data?.error || e.response?.data?.message;
-      alert(errMsg || e.message || JSON.stringify(e.response?.data || e));
+      const errMsg = normalizeError(
+        e.response?.data?.error ||
+        e.response?.data?.message ||
+        e.response?.data ||
+        e
+      );
+      alert(errMsg);
     } finally {
       setSaving(false);
     }

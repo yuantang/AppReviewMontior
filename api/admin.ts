@@ -4,10 +4,14 @@ import { createClient } from '@supabase/supabase-js';
 import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService';
 
 // Initialize Supabase Client
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !serviceKey) {
+  throw new Error('Supabase credentials are missing for api/admin (require SUPABASE_URL/VITE_SUPABASE_URL and SUPABASE_SERVICE_KEY)');
+}
+
+const supabase = createClient(supabaseUrl, serviceKey);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 1. Auth Check (Admin Only)
@@ -19,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   
   if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid token' });
+      return res.status(401).json({ error: 'Invalid token', details: authError?.message });
   }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
@@ -46,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
       console.error("Admin API Error:", error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Server error', details: error });
   }
 }
 
@@ -101,7 +105,8 @@ async function handleAddAccount(res: VercelResponse, account: any) {
     });
 
     if (error) {
-        return res.status(400).json({ error: error.message });
+        console.error('Add account error', error);
+        return res.status(400).json({ error: error.message, details: error });
     }
 
     return res.status(200).json({ success: true });

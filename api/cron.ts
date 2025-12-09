@@ -1,21 +1,27 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { GoogleGenAI } from "@google/genai";
 import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService';
 
-// Initialize Clients
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+// Initialize Clients with safer env handling
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_KEY;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+if (!supabaseUrl || !serviceKey) {
+  throw new Error('Supabase credentials missing: require SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_SERVICE_KEY');
+}
+
+const supabase = createClient(supabaseUrl, serviceKey);
+
+// AI client is optional; when missing, we fall back to neutral
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 // AI Helper
 async function analyzeReview(body: string) {
+  if (!ai) return { sentiment: 'neutral', topics: [] };
   try {
     const model = 'gemini-2.5-flash';
     const sRes = await ai.models.generateContent({ model, contents: `Sentiment of: "${body}". Return one word: positive, neutral, negative.` });
@@ -50,7 +56,8 @@ const sendNotification = async (webhookUrl: string | undefined, review: any, app
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // --- Security Check ---
-  const isCronAuthorized = (req.headers['authorization'] === `Bearer ${process.env.CRON_SECRET}`) || (req.query.key === process.env.CRON_SECRET);
+  const cronSecret = process.env.CRON_SECRET;
+  const isCronAuthorized = (!!cronSecret && (req.headers['authorization'] === `Bearer ${cronSecret}`)) || (req.query.key === cronSecret);
   let isAdmin = false;
 
   if (!isCronAuthorized) {
@@ -68,14 +75,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isCronAuthorized && !isAdmin) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
+    if (!geminiApiKey) {
+      console.warn('GEMINI_API_KEY missing; proceeding with neutral sentiment/topics');
+    }
+
     console.log("🚀 Starting Multi-Account Sync...");
     
     // 1. Load Global Settings
-    const { data: settings } = await supabase.from('settings').select('*').single();
+    const { data: settings, error: settingsError } = await supabase.from('settings').select('*').single();
+    if (settingsError) {
+      throw new Error(`Failed to load settings: ${settingsError.message}`);
+    }
     const webhookUrl = settings?.webhook_url;
 
     // 2. Fetch All Developer Accounts
-    const { data: accounts } = await supabase.from('apple_accounts').select('*');
+    const { data: accounts, error: accountsError } = await supabase.from('apple_accounts').select('*');
+    if (accountsError) {
+      throw new Error(`Failed to load apple_accounts: ${accountsError.message}`);
+    }
     if (!accounts || accounts.length === 0) return res.json({ message: 'No developer accounts found.' });
 
     let stats = { processed: 0, new: 0, errors: 0 };
@@ -137,7 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                              await sendNotification(webhookUrl, reviewData, app.name);
                         }
                     }
-                } catch (err) {
+                } catch (err: any) {
                     console.error(`Failed to sync app ${app.name}`, err);
                     stats.errors++;
                 }
@@ -157,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await supabase.from('sync_logs').insert({
               account_id: account.id,
               status: 'failed',
-              message: accErr.message || 'Unknown error'
+              message: accErr?.message || 'Unknown error'
             });
         }
     }
@@ -166,6 +183,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error("Sync Fatal Error:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message || 'Fatal error', details: error });
   }
 }
