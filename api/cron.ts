@@ -6,8 +6,14 @@ import { GoogleGenAI } from "@google/genai";
 import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService';
 
 // Initialize Clients with safer env handling
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseUrl =
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  process.env.SUPABASE_PROJECT_URL;
+const serviceKey =
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY;
 
 if (!supabaseUrl || !serviceKey) {
   throw new Error('Supabase credentials missing: require SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_SERVICE_KEY');
@@ -65,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!client) {
     return res.status(500).json({
       error: 'Supabase env missing',
-      details: 'Require SUPABASE_SERVICE_KEY and SUPABASE_URL (or VITE_SUPABASE_URL)'
+      details: 'Require SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_URL (or VITE_SUPABASE_URL)'
     });
   }
 
