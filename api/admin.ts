@@ -23,51 +23,63 @@ const getSupabase = () => {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const client = getSupabase();
-  if (!client) {
-    return res.status(500).json({
-      error: 'Supabase env missing',
-      details: 'Require SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_URL (or VITE_SUPABASE_URL)'
-    });
-  }
-
-  // 1. Auth Check (Admin Only)
-  const authHeader = req.headers['authorization'];
-  if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing authorization' });
-  }
-  const token = authHeader.split(' ')[1];
-  const { data: { user }, error: authError } = await client.auth.getUser(token);
-  
-  if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid token', details: authError?.message });
-  }
-
-  const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).single();
-  if (profile?.role !== 'admin') {
-      return res.status(403).json({ error: 'Admins only' });
-  }
-
-  // 2. Route Action
-  const { action, accountId, account } = req.body;
-
   try {
-      if (action === 'test_connection') {
-          return await handleTestConnection(res, accountId);
-      } 
-      else if (action === 'list_apps_from_apple') {
-          return await handleListApps(res, accountId);
-      }
-      else if (action === 'add_account') {
-          return await handleAddAccount(res, account, client);
-      }
-      else {
-          return res.status(400).json({ error: 'Invalid action' });
-      }
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const client = getSupabase();
+    if (!client) {
+      return res.status(500).json({
+        error: 'Supabase env missing',
+        details: 'Require SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_URL (or VITE_SUPABASE_URL)'
+      });
+    }
+
+    // 1. Auth Check (Admin Only)
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing authorization' });
+    }
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await client.auth.getUser(token);
+    
+    if (authError || !user) {
+        return res.status(401).json({ error: 'Invalid token', details: authError?.message });
+    }
+
+    const { data: profile, error: profileError } = await client.from('profiles').select('role').eq('id', user.id).single();
+    if (profileError) {
+      console.error('Profile fetch error', profileError);
+      return res.status(500).json({ error: 'Profile fetch failed', details: profileError.message });
+    }
+    if (profile?.role !== 'admin') {
+        return res.status(403).json({ error: 'Admins only' });
+    }
+
+    // 2. Route Action
+    const { action, accountId, account } = req.body || {};
+
+    if (!action) {
+      return res.status(400).json({ error: 'Missing action' });
+    }
+
+    if (action === 'test_connection') {
+        return await handleTestConnection(res, accountId);
+    } 
+    else if (action === 'list_apps_from_apple') {
+        return await handleListApps(res, accountId);
+    }
+    else if (action === 'add_account') {
+        return await handleAddAccount(res, account, client);
+    }
+    else {
+        return res.status(400).json({ error: 'Invalid action' });
+    }
 
   } catch (error: any) {
-      console.error("Admin API Error:", error);
-      return res.status(500).json({ error: error.message || 'Server error', details: error });
+    console.error("Admin API Error:", error);
+    return res.status(500).json({ error: error?.message || 'Server error', details: error });
   }
 }
 
