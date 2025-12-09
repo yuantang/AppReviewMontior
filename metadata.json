@@ -1,0 +1,5 @@
+{
+  "name": "AppStore Monitor AI",
+  "description": "A comprehensive dashboard for monitoring App Store reviews across multiple products, featuring AI-driven sentiment analysis, topic extraction, and automated reply generation.",
+  "requestFramePermissions": []
+}

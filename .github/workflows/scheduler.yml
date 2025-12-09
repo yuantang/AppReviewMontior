@@ -1,0 +1,40 @@
+name: App Store Sync Scheduler
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Vercel Cron Endpoint
+        run: |
+          if [ -z "${{ secrets.VERCEL_PROJECT_DOMAIN }}" ]; then
+            echo "Error: VERCEL_PROJECT_DOMAIN secret is missing."
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Error: CRON_SECRET secret is missing."
+            exit 1
+          fi
+
+          echo "Triggering sync job..."
+
+          response=$(curl -s -w "%{http_code}" -o response.json \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://${{ secrets.VERCEL_PROJECT_DOMAIN }}/api/cron"
+          )
+
+          http_code=${response: -3}
+
+          if [ "$http_code" -eq "200" ]; then
+             echo "✅ Sync triggered successfully."
+             cat response.json
+          else
+             echo "❌ Failed to trigger sync. HTTP Code: $http_code"
+             cat response.json
+             exit 1
+          fi
