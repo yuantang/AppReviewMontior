@@ -3,6 +3,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService';
 
+// Force Node runtime (not Edge) to ensure crypto/jwt work
+export const config = {
+  runtime: 'nodejs18.x'
+};
+
 // Lazy supabase init to avoid crashing route on missing envs; return clear 500 instead.
 let supabase: SupabaseClient | null = null;
 const getSupabase = () => {
@@ -79,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error("Admin API Error:", error);
-    return res.status(500).json({ error: error?.message || 'Server error', details: error });
+    return res.status(500).json({ error: error?.message || 'Server error', details: error?.stack || error });
   }
 }
 
