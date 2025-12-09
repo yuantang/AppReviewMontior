@@ -131,10 +131,14 @@ const Settings: React.FC = () => {
         setIsAddingAccount(false);
         loadAccounts();
       } else {
-        alert(res.data.error || "Error adding account.");
+        const errMsg = typeof res.data.error === 'string' 
+          ? res.data.error 
+          : JSON.stringify(res.data.error || 'Error adding account.');
+        alert(errMsg);
       }
     } catch (e: any) {
-      alert(e.response?.data?.error || e.message);
+      const errMsg = e.response?.data?.error || e.response?.data?.message;
+      alert(errMsg || e.message || JSON.stringify(e.response?.data || e));
     } finally {
       setSaving(false);
     }
