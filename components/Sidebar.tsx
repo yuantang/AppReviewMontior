@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
-  const { profile, signOut } = useAuth();
+  const { profile, user, signOut } = useAuth();
   const { t } = useLanguage();
   
   const menuItems = [
@@ -55,10 +55,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
         
         <div className="flex items-center space-x-3 text-slate-400 text-sm">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${profile?.role === 'admin' ? 'bg-purple-600 text-white' : 'bg-slate-700'}`}>
-            {profile?.email?.charAt(0).toUpperCase() || 'U'}
+            {(profile?.email || user?.email || 'U').charAt(0).toUpperCase()}
           </div>
           <div className="overflow-hidden">
-            <p className="text-white font-medium truncate w-32" title={profile?.email}>{profile?.email || 'User'}</p>
+            <p className="text-white font-medium truncate w-32" title={profile?.email || user?.email || user?.id}>
+              {profile?.email || user?.email || user?.id || 'User'}
+            </p>
             <p className="text-xs capitalize px-1.5 py-0.5 bg-slate-800 rounded inline-block border border-slate-600">
                 {profile?.role || 'Viewer'}
             </p>

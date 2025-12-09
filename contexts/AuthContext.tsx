@@ -29,7 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session) {
         setSession(session);
         setUser(session.user);
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session);
       } else {
         setLoading(false);
       }
@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session);
       } else {
         setProfile(null);
         setLoading(false);
@@ -53,21 +53,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, currentSession?: Session | null) => {
     try {
+      // Primary: fetch via client (uses RLS)
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      if (error) {
-        console.warn("Could not fetch profile", error);
-        // Fallback profile if DB trigger failed or pending, default to Viewer for safety
-        // unless it's the demo login which handles its own profile
-        setProfile({ id: userId, email: '', role: 'viewer' }); 
-      } else {
+      if (!error && data) {
         setProfile(data as UserProfile);
+        return;
+      }
+
+      // Fallback: use serverless endpoint with service role to bypass RLS / missing row issues
+      const token = currentSession?.access_token || session?.access_token;
+      if (!token) {
+        console.warn('No access token available to re-fetch profile');
+        return;
+      }
+
+      const res = await fetch('/api/profile', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const { profile: profileFromApi } = await res.json();
+        if (profileFromApi) {
+          setProfile(profileFromApi as UserProfile);
+          return;
+        }
+      } else {
+        console.warn('Profile fallback endpoint failed', await res.text());
       }
     } catch (e) {
       console.error(e);
