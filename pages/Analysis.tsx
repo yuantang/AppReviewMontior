@@ -196,7 +196,7 @@ const Analysis: React.FC = () => {
                 </div>
                 
                 {report ? (
-                    <div className="prose prose-sm max-w-none text-slate-700 bg-white p-4 rounded-lg border border-purple-50/50 leading-6 space-y-2">
+                    <div className="bg-white p-4 rounded-lg border border-purple-50/50 leading-6 space-y-2 text-slate-700 text-sm">
                         <div className="whitespace-pre-wrap">{report}</div>
                     </div>
                 ) : (

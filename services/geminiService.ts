@@ -91,7 +91,10 @@ export const generateAnalysisReport = async (stats: any): Promise<string> => {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            // If needed, we can add safetySettings or generationConfig here
+            // Force plain-text output to avoid markdown rendering issues
+            generationConfig: {
+              responseMimeType: 'text/plain'
+            }
         });
 
         return response.text || "Failed to generate report.";
