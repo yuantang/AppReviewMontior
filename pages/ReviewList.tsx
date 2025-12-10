@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const ReviewList: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
   const { t } = useLanguage();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [apps, setApps] = useState<AppProduct[]>([]);
@@ -40,21 +40,15 @@ const ReviewList: React.FC = () => {
     
     try {
       if (isSupabaseConfigured()) {
-        const tokenRes = await axios.post('/api/admin', { action: 'list_reviews' }, { headers: { Authorization: `Bearer ${session?.access_token}` } });
-        const appsRes = await axios.post('/api/admin', { action: 'list_apps' }, { headers: { Authorization: `Bearer ${session?.access_token}` } });
+        const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
+        const [reviewsRes, appsRes] = await Promise.all([
+          axios.post('/api/admin', { action: 'list_reviews' }, { headers: authHeader }),
+          axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
+        ]);
 
-        const dbReviews = tokenRes.data?.reviews || [];
-        const dbApps = appsRes.data?.apps || [];
-
-        if (dbReviews.length > 0) {
-          setReviews(dbReviews);
-          setApps(dbApps);
-          setUsingMockData(false);
-        } else {
-          setReviews(MOCK_REVIEWS);
-          setApps(dbApps.length > 0 ? dbApps : MOCK_APPS);
-          setUsingMockData(true);
-        }
+        setReviews(reviewsRes.data?.reviews || []);
+        setApps(appsRes.data?.apps || []);
+        setUsingMockData(false);
       } else {
         setReviews(MOCK_REVIEWS);
         setApps(MOCK_APPS);
@@ -62,9 +56,10 @@ const ReviewList: React.FC = () => {
       }
     } catch (e) {
       console.error("Failed to load DB data", e);
-      setReviews(MOCK_REVIEWS);
-      setApps(MOCK_APPS);
-      setUsingMockData(true);
+      // 在连接 Supabase 失败时不要再展示 mock，直接显示空/真实状态
+      setReviews([]);
+      setApps([]);
+      setUsingMockData(false);
     } finally {
       setIsLoading(false);
     }
