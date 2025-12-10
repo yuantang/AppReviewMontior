@@ -88,6 +88,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (action === 'list_reviews') {
         return await handleListReviews(res, client, req.body?.filters);
     }
+    else if (action === 'list_users') {
+        return await handleListUsers(res, client);
+    }
+    else if (action === 'set_user_app_permission') {
+        return await handleSetUserAppPermission(res, client, req.body?.userId, req.body?.appId, req.body?.enable);
+    }
     else if (action === 'add_app') {
         return await handleAddApp(res, account, client);
     }
@@ -167,6 +173,33 @@ async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient)
         return res.status(500).json({ error: error.message, details: error });
     }
     return res.status(200).json({ success: true, apps: data });
+}
+
+async function handleListUsers(res: VercelResponse, client: SupabaseClient) {
+    const { data, error } = await client.from('profiles').select('*');
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    // Fetch permissions map
+    const { data: perms, error: permsError } = await client.from('user_apps').select('*');
+    if (permsError) {
+        return res.status(500).json({ error: permsError.message, details: permsError });
+    }
+    return res.status(200).json({ success: true, users: data, permissions: perms });
+}
+
+async function handleSetUserAppPermission(res: VercelResponse, client: SupabaseClient, userId?: string, appId?: number, enable?: boolean) {
+    if (!userId || !appId) {
+        return res.status(400).json({ error: 'Missing userId or appId' });
+    }
+    if (enable) {
+        const { error } = await client.from('user_apps').insert({ user_id: userId, app_id: appId, can_reply: false }).single();
+        if (error) return res.status(500).json({ error: error.message, details: error });
+    } else {
+        const { error } = await client.from('user_apps').delete().match({ user_id: userId, app_id: appId });
+        if (error) return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true });
 }
 
 async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters?: any) {

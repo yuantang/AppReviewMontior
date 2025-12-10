@@ -103,22 +103,29 @@ const Settings: React.FC = () => {
 
   const loadUsersAndPermissions = async () => {
     setLoading(true);
-    const { data: usersData } = await supabase.from('profiles').select('*');
-    if (usersData) setUsers(usersData as UserProfile[]);
+    try {
+      if (session?.access_token) {
+        const [usersRes, appsRes] = await Promise.all([
+          axios.post('/api/admin', { action: 'list_users' }, { headers: { Authorization: `Bearer ${session.access_token}` } }),
+          axios.post('/api/admin', { action: 'list_apps' }, { headers: { Authorization: `Bearer ${session.access_token}` } })
+        ]);
 
-    const { data: appsData } = await supabase.from('apps').select('id, name');
-    if (appsData) setAllApps(appsData as AppProduct[]);
+        if (usersRes.data?.users) setUsers(usersRes.data.users as UserProfile[]);
+        if (appsRes.data?.apps) setAllApps(appsRes.data.apps as AppProduct[]);
 
-    const { data: permsData } = await supabase.from('user_apps').select('*');
-    const permMap: Record<string, number[]> = {};
-    if (permsData) {
+        const permsData = usersRes.data?.permissions || [];
+        const permMap: Record<string, number[]> = {};
         permsData.forEach((p: any) => {
             if (!permMap[p.user_id]) permMap[p.user_id] = [];
             permMap[p.user_id].push(p.app_id);
         });
+        setUserPermissions(permMap);
+      }
+    } catch (e) {
+      console.error('Load users/perms failed', e);
+    } finally {
+      setLoading(false);
     }
-    setUserPermissions(permMap);
-    setLoading(false);
   };
 
   const loadTemplates = async () => {
@@ -219,12 +226,15 @@ const Settings: React.FC = () => {
   };
 
   const toggleUserAppPermission = async (userId: string, appId: number, currentStatus: boolean) => {
-      if (currentStatus) {
-          await supabase.from('user_apps').delete().match({ user_id: userId, app_id: appId });
-      } else {
-          await supabase.from('user_apps').insert({ user_id: userId, app_id: appId, can_reply: false });
+      try {
+        await axios.post('/api/admin', 
+          { action: 'set_user_app_permission', userId, appId, enable: !currentStatus },
+          { headers: { Authorization: `Bearer ${session?.access_token}` } }
+        );
+        loadUsersAndPermissions();
+      } catch (e) {
+        alert('Failed to update permissions');
       }
-      loadUsersAndPermissions();
   };
 
   const handleManualSync = async () => {
