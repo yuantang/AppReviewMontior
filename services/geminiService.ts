@@ -67,8 +67,14 @@ export const translateText = async (text: string, apiKey?: string): Promise<stri
 };
 
 export const generateAnalysisReport = async (stats: any): Promise<string> => {
+    // Detect language context from process.env.LANG or stats.lang; fallback to English
+    const lang = (stats.lang || process.env.LANG || 'en').toLowerCase().includes('zh') ? 'zh' : 'en';
+
     if (!process.env.API_KEY) {
         await new Promise(resolve => setTimeout(resolve, 2000));
+        if (lang === 'zh') {
+          return "## 决策摘要（演示）\n\n**整体状况：** 用户情绪偏中性，部分偏负面，主要集中在技术稳定性。\n\n**关键风险：**\n* **崩溃** 是一星评价的主要原因。\n* **广告频率** 引发越来越多的抱怨。\n\n**建议：** 在发布新功能前优先修复 v2.1.1 的稳定性问题。";
+        }
         return "## Executive Summary (Demo)\n\n**Overall Status:** User sentiment is mixed with a leaning towards negative feedback due to technical stability.\n\n**Key Risks:**\n* **Crashes** are the primary driver of 1-star reviews.\n* **Ads** frequency is a growing complaint.\n\n**Recommendation:** Prioritize stability fixes in v2.1.1 before releasing new features.";
     }
 
@@ -84,7 +90,8 @@ export const generateAnalysisReport = async (stats: any): Promise<string> => {
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: prompt,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            // If needed, we can add safetySettings or generationConfig here
         });
 
         return response.text || "Failed to generate report.";

@@ -68,7 +68,8 @@ const Analysis: React.FC = () => {
           positive: filteredReviews.filter(r => r.sentiment === 'positive').length,
           neutral: filteredReviews.filter(r => r.sentiment === 'neutral').length,
           negative: filteredReviews.filter(r => r.sentiment === 'negative').length,
-          topics: TOPICS.slice(0, 3) // Simplified for prompt
+          topics: TOPICS.slice(0, 3), // Simplified for prompt
+          lang: t('lang.code') || 'en' // optional language hint from i18n
       };
 
       const text = await generateAnalysisReport(stats);
@@ -195,9 +196,8 @@ const Analysis: React.FC = () => {
                 </div>
                 
                 {report ? (
-                    <div className="prose prose-sm max-w-none text-slate-700 bg-white p-4 rounded-lg border border-purple-50/50">
-                        {/* Simple rendering of markdown-like text */}
-                        <div className="whitespace-pre-wrap leading-relaxed">{report}</div>
+                    <div className="prose prose-sm max-w-none text-slate-700 bg-white p-4 rounded-lg border border-purple-50/50 leading-6 space-y-2">
+                        <div className="whitespace-pre-wrap">{report}</div>
                     </div>
                 ) : (
                     <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-purple-100 rounded-lg">
