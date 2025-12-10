@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 1. Auth Check (Admin Only)
+    // 1. Auth Check
     const authHeader = req.headers['authorization'];
     if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Missing authorization' });
@@ -59,15 +59,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Profile fetch error', profileError);
       return res.status(500).json({ error: 'Profile fetch failed', details: profileError.message });
     }
-    if (profile?.role !== 'admin') {
-        return res.status(403).json({ error: 'Admins only' });
-    }
+    const isAdmin = profile?.role === 'admin';
+    const userAppIds = await getUserAppIds(client, user.id);
 
     // 2. Route Action
     const { action, accountId, account } = req.body || {};
 
     if (!action) {
       return res.status(400).json({ error: 'Missing action' });
+    }
+
+    // Admin-only actions
+    const adminOnlyActions = new Set([
+      'test_connection',
+      'list_apps_from_apple',
+      'add_account',
+      'add_app',
+      'list_users',
+      'set_user_app_permission',
+      'get_settings',
+      'list_accounts'
+    ]);
+
+    if (adminOnlyActions.has(action) && !isAdmin) {
+      return res.status(403).json({ error: 'Admins only' });
     }
 
     if (action === 'test_connection') {
@@ -83,10 +98,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleGetSettings(res, client);
     }
     else if (action === 'list_apps') {
-        return await handleListAppsFromDb(res, client);
+        return await handleListAppsFromDb(res, client, userAppIds, isAdmin);
     }
     else if (action === 'list_reviews') {
-        return await handleListReviews(res, client, req.body?.filters);
+        return await handleListReviews(res, client, req.body?.filters, userAppIds, isAdmin);
     }
     else if (action === 'list_users') {
         return await handleListUsers(res, client);
@@ -167,8 +182,22 @@ async function handleGetSettings(res: VercelResponse, client: SupabaseClient) {
     return res.status(200).json({ success: true, settings: data });
 }
 
-async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient) {
-    const { data, error } = await client.from('apps').select('*').order('created_at', { ascending: false });
+async function getUserAppIds(client: SupabaseClient, userId: string): Promise<number[]> {
+    const { data, error } = await client.from('user_apps').select('app_id').eq('user_id', userId);
+    if (error) {
+        console.error('Permission fetch error', error);
+        return [];
+    }
+    return data?.map((row: any) => row.app_id) || [];
+}
+
+async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient, userAppIds: number[], isAdmin: boolean) {
+    let query = client.from('apps').select('*').order('created_at', { ascending: false });
+    if (!isAdmin) {
+      if (userAppIds.length === 0) return res.status(200).json({ success: true, apps: [] });
+      query = query.in('id', userAppIds);
+    }
+    const { data, error } = await query;
     if (error) {
         return res.status(500).json({ error: error.message, details: error });
     }
@@ -202,8 +231,12 @@ async function handleSetUserAppPermission(res: VercelResponse, client: SupabaseC
     return res.status(200).json({ success: true });
 }
 
-async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters?: any) {
+async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isAdmin: boolean) {
     let query = client.from('reviews').select('*').order('created_at_store', { ascending: false });
+    if (!isAdmin) {
+      if (userAppIds.length === 0) return res.status(200).json({ success: true, reviews: [] });
+      query = query.in('app_id', userAppIds);
+    }
     if (filters?.app_id) query = query.eq('app_id', filters.app_id);
     if (filters?.rating) query = query.eq('rating', filters.rating);
     const { data, error } = await query.limit(200);
