@@ -237,6 +237,18 @@ const Settings: React.FC = () => {
       }
   };
 
+  const handleRoleChange = async (userId: string, role: 'admin' | 'viewer') => {
+      try {
+        await axios.post('/api/admin',
+          { action: 'set_user_role', userId, role },
+          { headers: { Authorization: `Bearer ${session?.access_token}` } }
+        );
+        loadUsersAndPermissions();
+      } catch (e) {
+        alert('Failed to update role');
+      }
+  };
+
   const handleManualSync = async () => {
     if (!isAdmin) return alert("Admins only.");
     if (!confirm("Start manual sync?")) return;
@@ -403,11 +415,16 @@ const Settings: React.FC = () => {
                           {users.map(user => (
                               <tr key={user.id}>
                                   <td className="px-6 py-4 font-medium text-slate-800">{user.email}</td>
-                                  <td className="px-6 py-4">
-                                      <span className={`px-2 py-1 rounded-full text-xs border ${user.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                                          {user.role}
-                                      </span>
-                                  </td>
+                              <td className="px-6 py-4">
+                                  <select
+                                    value={user.role}
+                                    onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'viewer')}
+                                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                                  >
+                                    <option value="viewer">viewer</option>
+                                    <option value="admin">admin</option>
+                                  </select>
+                              </td>
                                   <td className="px-6 py-4">
                                       {user.role === 'admin' ? (
                                           <span className="text-slate-400 italic text-xs">Full Access</span>

@@ -109,6 +109,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (action === 'set_user_app_permission') {
         return await handleSetUserAppPermission(res, client, req.body?.userId, req.body?.appId, req.body?.enable);
     }
+    else if (action === 'set_user_role') {
+        return await handleSetUserRole(res, client, req.body?.userId, req.body?.role);
+    }
     else if (action === 'add_app') {
         return await handleAddApp(res, account, client);
     }
@@ -228,6 +231,14 @@ async function handleSetUserAppPermission(res: VercelResponse, client: SupabaseC
         const { error } = await client.from('user_apps').delete().match({ user_id: userId, app_id: appId });
         if (error) return res.status(500).json({ error: error.message, details: error });
     }
+    return res.status(200).json({ success: true });
+}
+
+async function handleSetUserRole(res: VercelResponse, client: SupabaseClient, userId?: string, role?: string) {
+    if (!userId || !role) return res.status(400).json({ error: 'Missing userId or role' });
+    if (!['admin', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    const { error } = await client.from('profiles').update({ role }).eq('id', userId);
+    if (error) return res.status(500).json({ error: error.message, details: error });
     return res.status(200).json({ success: true });
 }
 
