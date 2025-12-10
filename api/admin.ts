@@ -72,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Admin-only actions
+    // Superadmin-only: high-risk actions
     const superAdminOnly = new Set([
       'test_connection',
       'list_apps_from_apple',
@@ -85,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]);
 
     if (superAdminOnly.has(action) && !isSuperAdmin) {
-      return res.status(403).json({ error: 'Admins only' });
+      return res.status(403).json({ error: 'Superadmin only' });
     }
 
     if (action === 'test_connection') {
