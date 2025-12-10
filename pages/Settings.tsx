@@ -249,6 +249,28 @@ const Settings: React.FC = () => {
       }
   };
 
+  const updateUserApps = async (userId: string, selectedIds: number[]) => {
+      const current = userPermissions[userId] || [];
+      const toAdd = selectedIds.filter(id => !current.includes(id));
+      const toRemove = current.filter(id => !selectedIds.includes(id));
+
+      try {
+        await Promise.all([
+          ...toAdd.map(id => axios.post('/api/admin', 
+            { action: 'set_user_app_permission', userId, appId: id, enable: true },
+            { headers: { Authorization: `Bearer ${session?.access_token}` } }
+          )),
+          ...toRemove.map(id => axios.post('/api/admin', 
+            { action: 'set_user_app_permission', userId, appId: id, enable: false },
+            { headers: { Authorization: `Bearer ${session?.access_token}` } }
+          ))
+        ]);
+        loadUsersAndPermissions();
+      } catch (e) {
+        alert('Failed to update app access');
+      }
+  };
+
   const handleManualSync = async () => {
     if (!isAdmin) return alert("Admins only.");
     if (!confirm("Start manual sync?")) return;
@@ -428,23 +450,21 @@ const Settings: React.FC = () => {
                                     </select>
                                   </td>
                                   <td className="px-6 py-4">
-                                      <div className="flex flex-wrap gap-2">
-                                          {allApps.map(app => {
-                                              const hasPerm = perms.includes(app.id);
-                                              return (
-                                                  <button 
-                                                      key={app.id}
-                                                      onClick={() => toggleUserAppPermission(user.id, app.id, !!hasPerm)}
-                                                      className={`px-2 py-1 rounded text-xs border transition-colors ${
-                                                        hasPerm ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-300 border-slate-100'
-                                                      } ${user.role === 'admin' ? '' : 'hover:border-blue-200 hover:text-blue-600'}`}
-                                                    >
-                                                      {app.name}
-                                                  </button>
-                                              )
-                                          })}
-                                          {allApps.length === 0 && <span className="text-slate-400 text-xs">No apps available</span>}
-                                      </div>
+                                      <select
+                                        multiple
+                                        value={perms.map(String)}
+                                        onChange={(e) => {
+                                          const selected = Array.from(e.target.selectedOptions).map(o => Number(o.value));
+                                          updateUserApps(user.id, selected);
+                                        }}
+                                        className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white min-w-[200px]"
+                                        size={Math.min(6, Math.max(2, allApps.length))}
+                                      >
+                                        {allApps.map(app => (
+                                          <option key={app.id} value={app.id}>{app.name}</option>
+                                        ))}
+                                      </select>
+                                      {allApps.length === 0 && <span className="text-slate-400 text-xs ml-2">No apps available</span>}
                                   </td>
                               </tr>
                           )})}
