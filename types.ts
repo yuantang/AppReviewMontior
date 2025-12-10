@@ -69,7 +69,7 @@ export interface AppStoreConfig {
 export interface UserProfile {
   id: string;
   email: string;
-  role: 'admin' | 'viewer';
+  role: 'superadmin' | 'admin' | 'viewer';
 }
 
 export interface UserAppPermission {

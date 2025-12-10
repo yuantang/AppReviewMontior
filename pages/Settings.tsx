@@ -32,7 +32,7 @@ const Settings: React.FC = () => {
   const [isAddingAccount, setIsAddingAccount] = useState(false);
 
   // User Permissions State
-  const [users, setUsers] = useState<UserProfile[]>([]);
+    const [users, setUsers] = useState<UserProfile[]>([]);
   const [allApps, setAllApps] = useState<AppProduct[]>([]);
   const [userPermissions, setUserPermissions] = useState<Record<string, number[]>>({});
 
@@ -447,24 +447,31 @@ const Settings: React.FC = () => {
                                     >
                                       <option value="viewer">viewer</option>
                                       <option value="admin">admin</option>
+                                      <option value="superadmin">superadmin</option>
                                     </select>
                                   </td>
                                   <td className="px-6 py-4">
-                                      <select
-                                        multiple
-                                        value={perms.map(String)}
-                                        onChange={(e) => {
-                                          const selected = Array.from(e.target.selectedOptions).map(o => Number(o.value));
-                                          updateUserApps(user.id, selected);
-                                        }}
-                                        className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white min-w-[200px]"
-                                        size={Math.min(6, Math.max(2, allApps.length))}
-                                      >
-                                        {allApps.map(app => (
-                                          <option key={app.id} value={app.id}>{app.name}</option>
-                                        ))}
-                                      </select>
-                                      {allApps.length === 0 && <span className="text-slate-400 text-xs ml-2">No apps available</span>}
+                                      {user.role === 'superadmin' ? (
+                                        <span className="text-slate-400 italic text-xs">Full Access</span>
+                                      ) : (
+                                        <>
+                                          <select
+                                            multiple
+                                            value={perms.map(String)}
+                                            onChange={(e) => {
+                                              const selected = Array.from(e.target.selectedOptions).map(o => Number(o.value));
+                                              updateUserApps(user.id, selected);
+                                            }}
+                                            className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white min-w-[200px]"
+                                            size={Math.min(6, Math.max(2, allApps.length))}
+                                          >
+                                            {allApps.map(app => (
+                                              <option key={app.id} value={app.id}>{app.name}</option>
+                                            ))}
+                                          </select>
+                                          {allApps.length === 0 && <span className="text-slate-400 text-xs ml-2">No apps available</span>}
+                                        </>
+                                      )}
                                   </td>
                               </tr>
                           )})}

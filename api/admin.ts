@@ -59,7 +59,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Profile fetch error', profileError);
       return res.status(500).json({ error: 'Profile fetch failed', details: profileError.message });
     }
-    const isAdmin = profile?.role === 'admin';
+    const role = profile?.role || 'viewer';
+    const isSuperAdmin = role === 'superadmin';
+    const isAdmin = role === 'admin' || isSuperAdmin;
     const userAppIds = await getUserAppIds(client, user.id);
 
     // 2. Route Action
@@ -70,18 +72,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Admin-only actions
-    const adminOnlyActions = new Set([
+    const superAdminOnly = new Set([
       'test_connection',
       'list_apps_from_apple',
       'add_account',
       'add_app',
       'list_users',
       'set_user_app_permission',
+      'set_user_role',
       'get_settings',
       'list_accounts'
     ]);
 
-    if (adminOnlyActions.has(action) && !isAdmin) {
+    if (superAdminOnly.has(action) && !isSuperAdmin) {
       return res.status(403).json({ error: 'Admins only' });
     }
 
@@ -98,10 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleGetSettings(res, client);
     }
     else if (action === 'list_apps') {
-        return await handleListAppsFromDb(res, client, userAppIds, isAdmin);
+        return await handleListAppsFromDb(res, client, userAppIds, isSuperAdmin);
     }
     else if (action === 'list_reviews') {
-        return await handleListReviews(res, client, req.body?.filters, userAppIds, isAdmin);
+        return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin);
     }
     else if (action === 'list_users') {
         return await handleListUsers(res, client);
@@ -194,9 +197,9 @@ async function getUserAppIds(client: SupabaseClient, userId: string): Promise<nu
     return data?.map((row: any) => row.app_id) || [];
 }
 
-async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient, userAppIds: number[], isAdmin: boolean) {
+async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient, userAppIds: number[], isSuperAdmin: boolean) {
     let query = client.from('apps').select('*').order('created_at', { ascending: false });
-    if (!isAdmin) {
+    if (!isSuperAdmin) {
       if (userAppIds.length === 0) return res.status(200).json({ success: true, apps: [] });
       query = query.in('id', userAppIds);
     }
@@ -236,15 +239,15 @@ async function handleSetUserAppPermission(res: VercelResponse, client: SupabaseC
 
 async function handleSetUserRole(res: VercelResponse, client: SupabaseClient, userId?: string, role?: string) {
     if (!userId || !role) return res.status(400).json({ error: 'Missing userId or role' });
-    if (!['admin', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    if (!['superadmin','admin', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
     const { error } = await client.from('profiles').update({ role }).eq('id', userId);
     if (error) return res.status(500).json({ error: error.message, details: error });
     return res.status(200).json({ success: true });
 }
 
-async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isAdmin: boolean) {
+async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isSuperAdmin: boolean) {
     let query = client.from('reviews').select('*').order('created_at_store', { ascending: false });
-    if (!isAdmin) {
+    if (!isSuperAdmin) {
       if (userAppIds.length === 0) return res.status(200).json({ success: true, reviews: [] });
       query = query.in('app_id', userAppIds);
     }
