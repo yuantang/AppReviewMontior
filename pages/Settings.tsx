@@ -226,15 +226,15 @@ const Settings: React.FC = () => {
   };
 
   const toggleUserAppPermission = async (userId: string, appId: number, currentStatus: boolean) => {
-      try {
-        await axios.post('/api/admin', 
-          { action: 'set_user_app_permission', userId, appId, enable: !currentStatus },
-          { headers: { Authorization: `Bearer ${session?.access_token}` } }
-        );
-        loadUsersAndPermissions();
-      } catch (e) {
-        alert('Failed to update permissions');
-      }
+    try {
+      await axios.post('/api/admin', 
+        { action: 'set_user_app_permission', userId, appId, enable: !currentStatus },
+        { headers: { Authorization: `Bearer ${session?.access_token}` } }
+      );
+      loadUsersAndPermissions();
+    } catch (e) {
+      alert('Failed to update permissions');
+    }
   };
 
   const handleRoleChange = async (userId: string, role: 'admin' | 'viewer') => {
@@ -412,42 +412,42 @@ const Settings: React.FC = () => {
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                          {users.map(user => (
+                          {users.map(user => {
+                              const perms = userPermissions[user.id] || [];
+                              return (
                               <tr key={user.id}>
                                   <td className="px-6 py-4 font-medium text-slate-800">{user.email}</td>
-                              <td className="px-6 py-4">
-                                  <select
-                                    value={user.role}
-                                    onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'viewer')}
-                                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
-                                  >
-                                    <option value="viewer">viewer</option>
-                                    <option value="admin">admin</option>
-                                  </select>
-                              </td>
                                   <td className="px-6 py-4">
-                                      {user.role === 'admin' ? (
-                                          <span className="text-slate-400 italic text-xs">Full Access</span>
-                                      ) : (
-                                          <div className="flex flex-wrap gap-2">
-                                              {allApps.map(app => {
-                                                  const hasPerm = userPermissions[user.id]?.includes(app.id);
-                                                  return (
-                                                      <button 
-                                                          key={app.id}
-                                                          onClick={() => toggleUserAppPermission(user.id, app.id, !!hasPerm)}
-                                                          className={`px-2 py-1 rounded text-xs border transition-colors ${hasPerm ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-300 border-slate-100 grayscale'}`}
-                                                      >
-                                                          {app.name}
-                                                      </button>
-                                                  )
-                                              })}
-                                              {allApps.length === 0 && <span className="text-slate-400 text-xs">No apps available</span>}
-                                          </div>
-                                      )}
+                                    <select
+                                      value={user.role}
+                                      onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'viewer')}
+                                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                                    >
+                                      <option value="viewer">viewer</option>
+                                      <option value="admin">admin</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <div className="flex flex-wrap gap-2">
+                                          {allApps.map(app => {
+                                              const hasPerm = perms.includes(app.id);
+                                              return (
+                                                  <button 
+                                                      key={app.id}
+                                                      onClick={() => toggleUserAppPermission(user.id, app.id, !!hasPerm)}
+                                                      className={`px-2 py-1 rounded text-xs border transition-colors ${
+                                                        hasPerm ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-300 border-slate-100'
+                                                      } ${user.role === 'admin' ? '' : 'hover:border-blue-200 hover:text-blue-600'}`}
+                                                    >
+                                                      {app.name}
+                                                  </button>
+                                              )
+                                          })}
+                                          {allApps.length === 0 && <span className="text-slate-400 text-xs">No apps available</span>}
+                                      </div>
                                   </td>
                               </tr>
-                          ))}
+                          )})}
                       </tbody>
                   </table>
               </div>
