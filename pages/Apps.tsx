@@ -36,22 +36,28 @@ const Apps: React.FC = () => {
 
   // Fetch Data
   const fetchData = async () => {
+    // If Supabase not configured, use mocks
     if (!isSupabaseConfigured()) {
       setApps(MOCK_APPS);
       return;
     }
     
     setLoading(true);
-    // Fetch Apps
-    const { data: appsData } = await supabase.from('apps').select('*').order('created_at', { ascending: false });
-    if (appsData) setApps(appsData as AppProduct[]);
+    try {
+      if (session?.access_token) {
+        const [appsRes, accRes] = await Promise.all([
+          axios.post('/api/admin', { action: 'list_apps' }, { headers: { Authorization: `Bearer ${session.access_token}` } }),
+          isAdmin ? axios.post('/api/admin', { action: 'list_accounts' }, { headers: { Authorization: `Bearer ${session.access_token}` } }) : Promise.resolve(null)
+        ]);
 
-    // Fetch Accounts (For dropdown)
-    if (isAdmin) {
-        const { data: accData } = await supabase.from('apple_accounts').select('id, name');
-        if (accData) setAccounts(accData as AppleAccount[]);
+        if (appsRes?.data?.apps) setApps(appsRes.data.apps as AppProduct[]);
+        if (accRes && accRes.data?.accounts) setAccounts(accRes.data.accounts as AppleAccount[]);
+      }
+    } catch (e) {
+      console.error('Load apps/accounts failed', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -110,16 +116,24 @@ const Apps: React.FC = () => {
       account_id: Number(newApp.account_id)
     };
 
-    if (isSupabaseConfigured()) {
-        const { data, error } = await supabase.from('apps').insert(appPayload).select();
-        if (error) alert("Error: " + error.message);
-        else if (data) {
-            setApps([data[0] as AppProduct, ...apps]);
+    if (isSupabaseConfigured() && session?.access_token) {
+      try {
+        const res = await axios.post('/api/admin',
+          { action: 'add_app', account: appPayload },
+          { headers: { Authorization: `Bearer ${session.access_token}` } }
+        );
+        if (res.data?.app) {
+            setApps([res.data.app as AppProduct, ...apps]);
             setIsModalOpen(false);
             setNewApp({ name: '', app_store_id: '', bundle_id: '', platform: 'ios', account_id: '' });
             setImportableApps([]);
             setSelectedImportApp(null);
+        } else {
+            alert(res.data?.error || 'Failed to add app');
         }
+      } catch (e: any) {
+        alert(e.response?.data?.error || e.message);
+      }
     }
     setSubmitting(false);
   };

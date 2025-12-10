@@ -82,6 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (action === 'get_settings') {
         return await handleGetSettings(res, client);
     }
+    else if (action === 'list_apps') {
+        return await handleListAppsFromDb(res, client);
+    }
+    else if (action === 'add_app') {
+        return await handleAddApp(res, account, client);
+    }
     else if (action === 'add_account') {
         return await handleAddAccount(res, account, client);
     }
@@ -150,6 +156,32 @@ async function handleGetSettings(res: VercelResponse, client: SupabaseClient) {
         return res.status(500).json({ error: error.message, details: error });
     }
     return res.status(200).json({ success: true, settings: data });
+}
+
+async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient) {
+    const { data, error } = await client.from('apps').select('*').order('created_at', { ascending: false });
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true, apps: data });
+}
+
+async function handleAddApp(res: VercelResponse, app: any, client: SupabaseClient) {
+    if (!app?.name || !app?.app_store_id || !app?.account_id) {
+        return res.status(400).json({ error: 'Missing app fields' });
+    }
+    const payload = {
+        name: app.name,
+        app_store_id: app.app_store_id,
+        bundle_id: app.bundle_id,
+        platform: app.platform || 'ios',
+        account_id: app.account_id
+    };
+    const { data, error } = await client.from('apps').insert(payload).select();
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true, app: data?.[0] });
 }
 
 async function handleAddAccount(res: VercelResponse, account: any, client: SupabaseClient) {
