@@ -275,6 +275,14 @@ const Settings: React.FC = () => {
       }
   };
 
+  const toggleSingleApp = (userId: string, appId: number, currentPerms: number[], checked: boolean) => {
+      if (!isSuperAdmin) return;
+      const next = checked
+        ? Array.from(new Set([...currentPerms, appId]))
+        : currentPerms.filter(id => id !== appId);
+      updateUserApps(userId, next);
+  };
+
   const handleManualSync = async () => {
     if (!isAdmin) return alert("Admins only.");
     if (!confirm("Start manual sync?")) return;
@@ -462,24 +470,29 @@ const Settings: React.FC = () => {
                                   <td className="px-6 py-4">
                                       {user.role === 'superadmin' ? (
                                         <span className="text-slate-400 italic text-xs">Full Access</span>
+                                      ) : allApps.length === 0 ? (
+                                        <span className="text-slate-400 text-xs">No apps available</span>
                                       ) : (
-                                        <>
-                                          <select
-                                            multiple
-                                            value={perms.map(String)}
-                                            onChange={(e) => {
-                                              const selected = Array.from(e.target.selectedOptions).map(o => Number(o.value));
-                                              updateUserApps(user.id, selected);
-                                            }}
-                                            className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white min-w-[200px]"
-                                            size={Math.min(6, Math.max(2, allApps.length))}
-                                          >
-                                            {allApps.map(app => (
-                                              <option key={app.id} value={app.id}>{app.name}</option>
-                                            ))}
-                                          </select>
-                                          {allApps.length === 0 && <span className="text-slate-400 text-xs ml-2">No apps available</span>}
-                                        </>
+                                        <div className="border border-slate-200 rounded-lg p-2 bg-white max-w-xs">
+                                          <div className="text-[11px] text-slate-400 mb-1">Select Apps</div>
+                                          <div className="space-y-1 max-h-32 overflow-auto pr-1">
+                                            {allApps.map(app => {
+                                              const hasPerm = perms.includes(app.id);
+                                              return (
+                                                <label key={app.id} className="flex items-center space-x-2 text-xs text-slate-700">
+                                                  <input 
+                                                    type="checkbox" 
+                                                    checked={hasPerm}
+                                                    disabled={!isSuperAdmin}
+                                                    onChange={(e) => toggleSingleApp(user.id, app.id, perms, e.target.checked)}
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  />
+                                                  <span>{app.name}</span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
                                       )}
                                   </td>
                               </tr>
