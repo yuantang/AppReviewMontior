@@ -1,7 +1,8 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService';
+// Explicit .js extension for Node ESM resolution in Vercel bundle
+import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService.js';
 
 // Force Node runtime (not Edge) to ensure crypto/jwt work
 export const config = {

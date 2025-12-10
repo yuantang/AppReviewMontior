@@ -3,7 +3,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { GoogleGenAI } from "@google/genai";
-import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService';
+// Explicit .js extension for Node ESM resolution in Vercel bundle
+import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService.js';
 
 // Initialize Clients with safer env handling
 const supabaseUrl =
