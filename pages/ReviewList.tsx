@@ -38,35 +38,36 @@ const ReviewList: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     
-    if (isSupabaseConfigured()) {
-      try {
-        const [dbReviews, dbApps] = await Promise.all([
-          fetchReviewsFromDB(),
-          fetchAppsFromDB()
-        ]);
-        
-        if (dbReviews && dbReviews.length > 0) {
+    try {
+      if (isSupabaseConfigured()) {
+        const tokenRes = await axios.post('/api/admin', { action: 'list_reviews' }, { headers: { Authorization: `Bearer ${session?.access_token}` } });
+        const appsRes = await axios.post('/api/admin', { action: 'list_apps' }, { headers: { Authorization: `Bearer ${session?.access_token}` } });
+
+        const dbReviews = tokenRes.data?.reviews || [];
+        const dbApps = appsRes.data?.apps || [];
+
+        if (dbReviews.length > 0) {
           setReviews(dbReviews);
           setApps(dbApps);
           setUsingMockData(false);
         } else {
           setReviews(MOCK_REVIEWS);
-          setApps(MOCK_APPS);
+          setApps(dbApps.length > 0 ? dbApps : MOCK_APPS);
           setUsingMockData(true);
         }
-      } catch (e) {
-        console.error("Failed to load DB data", e);
+      } else {
         setReviews(MOCK_REVIEWS);
         setApps(MOCK_APPS);
         setUsingMockData(true);
       }
-    } else {
+    } catch (e) {
+      console.error("Failed to load DB data", e);
       setReviews(MOCK_REVIEWS);
       setApps(MOCK_APPS);
       setUsingMockData(true);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   useEffect(() => {

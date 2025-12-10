@@ -85,6 +85,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (action === 'list_apps') {
         return await handleListAppsFromDb(res, client);
     }
+    else if (action === 'list_reviews') {
+        return await handleListReviews(res, client, req.body?.filters);
+    }
     else if (action === 'add_app') {
         return await handleAddApp(res, account, client);
     }
@@ -164,6 +167,17 @@ async function handleListAppsFromDb(res: VercelResponse, client: SupabaseClient)
         return res.status(500).json({ error: error.message, details: error });
     }
     return res.status(200).json({ success: true, apps: data });
+}
+
+async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters?: any) {
+    let query = client.from('reviews').select('*').order('created_at_store', { ascending: false });
+    if (filters?.app_id) query = query.eq('app_id', filters.app_id);
+    if (filters?.rating) query = query.eq('rating', filters.rating);
+    const { data, error } = await query.limit(200);
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true, reviews: data });
 }
 
 async function handleAddApp(res: VercelResponse, app: any, client: SupabaseClient) {
