@@ -5,7 +5,7 @@ import { generateAppStoreToken, fetchAppsList } from '../backend/appStoreService
 
 // Force Node runtime (not Edge) to ensure crypto/jwt work
 export const config = {
-  runtime: 'nodejs18.x'
+  runtime: 'nodejs'
 };
 
 // Lazy supabase init to avoid crashing route on missing envs; return clear 500 instead.
