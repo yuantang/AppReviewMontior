@@ -5,14 +5,17 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { Sparkles, BrainCircuit, Filter, Loader2, TrendingUp, AlertTriangle } from 'lucide-react';
-import { fetchReviewsFromDB, fetchAppsFromDB, isSupabaseConfigured } from '../services/supabaseService';
+import { isSupabaseConfigured } from '../services/supabaseService';
 import { AppProduct, Review } from '../types';
-import { MOCK_REVIEWS, MOCK_APPS, TOPICS } from '../constants';
+import { TOPICS } from '../constants';
 import { generateAnalysisReport } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
+import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
 const Analysis: React.FC = () => {
   const { t } = useLanguage();
+  const { session } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [apps, setApps] = useState<AppProduct[]>([]);
   const [selectedAppId, setSelectedAppId] = useState<number | 'all'>('all');
@@ -28,31 +31,26 @@ const Analysis: React.FC = () => {
       setLoading(true);
       if (isSupabaseConfigured()) {
         try {
-          const [dbReviews, dbApps] = await Promise.all([
-            fetchReviewsFromDB(),
-            fetchAppsFromDB()
+          const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
+          const [reviewsRes, appsRes] = await Promise.all([
+            axios.post('/api/admin', { action: 'list_reviews' }, { headers: authHeader }),
+            axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
           ]);
-          
-          if (dbReviews && dbReviews.length > 0) {
-            setReviews(dbReviews);
-            setApps(dbApps);
-          } else {
-            setReviews(MOCK_REVIEWS);
-            setApps(MOCK_APPS);
-          }
+          setReviews(reviewsRes.data?.reviews || []);
+          setApps(appsRes.data?.apps || []);
         } catch (e) {
           console.error("Analysis load error", e);
-          setReviews(MOCK_REVIEWS);
-          setApps(MOCK_APPS);
+          setReviews([]);
+          setApps([]);
         }
       } else {
-        setReviews(MOCK_REVIEWS);
-        setApps(MOCK_APPS);
+        setReviews([]);
+        setApps([]);
       }
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [session]);
 
   // 2. Filter Reviews
   const filteredReviews = useMemo(() => {

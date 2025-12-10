@@ -8,13 +8,16 @@ import { Link } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import DateRangePicker, { DateRange } from '../components/DateRangePicker';
 import { Skeleton, CardSkeleton, ChartSkeleton } from '../components/Skeleton';
-import { MOCK_REVIEWS, TOPICS } from '../constants';
-import { fetchReviewsFromDB, fetchAppsFromDB, isSupabaseConfigured } from '../services/supabaseService';
+import { TOPICS } from '../constants';
+import { isSupabaseConfigured } from '../services/supabaseService';
 import { Review, AppProduct } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
+import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard: React.FC = () => {
   const { t } = useLanguage();
+  const { session } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [apps, setApps] = useState<AppProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,28 +38,29 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      if (isSupabaseConfigured()) {
-        try {
-          const [reviewsData, appsData] = await Promise.all([
-             fetchReviewsFromDB(),
-             fetchAppsFromDB()
+      try {
+        if (isSupabaseConfigured()) {
+          const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
+          const [reviewsRes, appsRes] = await Promise.all([
+            axios.post('/api/admin', { action: 'list_reviews' }, { headers: authHeader }),
+            axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
           ]);
 
-          if (reviewsData && reviewsData.length > 0) setReviews(reviewsData);
-          else setReviews(MOCK_REVIEWS); // Fallback to mock if DB empty
-          
-          if (appsData) setApps(appsData);
-        } catch (e) {
-          console.log("Using mock data for dashboard");
-          setReviews(MOCK_REVIEWS);
+          setReviews(reviewsRes.data?.reviews || []);
+          setApps(appsRes.data?.apps || []);
+        } else {
+          setReviews([]);
+          setApps([]);
         }
-      } else {
-        setReviews(MOCK_REVIEWS);
+      } catch (e) {
+        console.error("Failed to load dashboard data", e);
+        setReviews([]);
+        setApps([]);
       }
       setLoading(false);
     };
     load();
-  }, []);
+  }, [session]);
 
   // Filter Data based on Time Range and App
   const filteredReviews = useMemo(() => {
