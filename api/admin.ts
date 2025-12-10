@@ -78,11 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       'list_apps_from_apple',
       'add_account',
       'add_app',
-      'list_users',
       'set_user_app_permission',
       'set_user_role',
-      'get_settings',
-      'list_accounts'
+      'get_settings'
     ]);
 
     if (superAdminOnly.has(action) && !isSuperAdmin) {
@@ -96,6 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleListApps(res, accountId);
     }
     else if (action === 'list_accounts') {
+        // Allow admin/superadmin to view accounts
+        if (!isAdmin) return res.status(403).json({ error: 'Admins only' });
         return await handleListAccounts(res, client);
     }
     else if (action === 'get_settings') {
@@ -108,6 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin);
     }
     else if (action === 'list_users') {
+        // Allow admin/superadmin to view users
+        if (!isAdmin) return res.status(403).json({ error: 'Admins only' });
         return await handleListUsers(res, client);
     }
     else if (action === 'set_user_app_permission') {
