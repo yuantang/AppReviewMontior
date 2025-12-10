@@ -11,6 +11,10 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
+// Simple cache to avoid refetch when switching tabs
+let cachedReviews: Review[] = [];
+let cachedApps: AppProduct[] = [];
+
 const ReviewList: React.FC = () => {
   const { isAdmin, session } = useAuth();
   const { t } = useLanguage();
@@ -39,6 +43,14 @@ const ReviewList: React.FC = () => {
     setIsLoading(true);
     
     try {
+      if (cachedReviews.length > 0 || cachedApps.length > 0) {
+        setReviews(cachedReviews);
+        setApps(cachedApps);
+        setUsingMockData(false);
+        setIsLoading(false);
+        return;
+      }
+
       if (isSupabaseConfigured()) {
         const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
         const [reviewsRes, appsRes] = await Promise.all([
@@ -46,9 +58,19 @@ const ReviewList: React.FC = () => {
           axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
         ]);
 
-        setReviews(reviewsRes.data?.reviews || []);
-        setApps(appsRes.data?.apps || []);
-        setUsingMockData(false);
+        const dbReviews = reviewsRes.data?.reviews || [];
+        const dbApps = appsRes.data?.apps || [];
+        if (dbReviews.length > 0) {
+          setReviews(dbReviews);
+          setApps(dbApps);
+          cachedReviews = dbReviews;
+          cachedApps = dbApps;
+          setUsingMockData(false);
+        } else {
+          setReviews(MOCK_REVIEWS);
+          setApps(dbApps.length > 0 ? dbApps : MOCK_APPS);
+          setUsingMockData(true);
+        }
       } else {
         setReviews(MOCK_REVIEWS);
         setApps(MOCK_APPS);
