@@ -10,7 +10,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 type Tab = 'general' | 'accounts' | 'users' | 'templates' | 'logs';
 
 const Settings: React.FC = () => {
-  const { isAdmin, session } = useAuth();
+  const { isAdmin, isSuperAdmin, session } = useAuth();
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [loading, setLoading] = useState(false);
@@ -148,7 +148,7 @@ const Settings: React.FC = () => {
   // --- ACTIONS ---
 
   const handleSaveSettings = async () => {
-    if (!isAdmin) return alert("Admins only.");
+    if (!isSuperAdmin) return alert("Superadmin only.");
     setSaving(true);
     const { error } = await supabase.from('settings').upsert({ ...settings, id: 1 });
     if (error) alert("Error: " + error.message);
@@ -157,6 +157,7 @@ const Settings: React.FC = () => {
   };
 
   const handleAddAccount = async () => {
+    if (!isSuperAdmin) return;
     if (!newAccount.name || !newAccount.private_key || !newAccount.issuer_id || !newAccount.key_id) {
       return alert("Fill all fields.");
     }
@@ -226,6 +227,7 @@ const Settings: React.FC = () => {
   };
 
   const toggleUserAppPermission = async (userId: string, appId: number, currentStatus: boolean) => {
+    if (!isSuperAdmin) return;
     try {
       await axios.post('/api/admin', 
         { action: 'set_user_app_permission', userId, appId, enable: !currentStatus },
@@ -237,7 +239,8 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleRoleChange = async (userId: string, role: 'admin' | 'viewer') => {
+  const handleRoleChange = async (userId: string, role: 'admin' | 'viewer' | 'superadmin') => {
+      if (!isSuperAdmin) return;
       try {
         await axios.post('/api/admin',
           { action: 'set_user_role', userId, role },
@@ -250,6 +253,7 @@ const Settings: React.FC = () => {
   };
 
   const updateUserApps = async (userId: string, selectedIds: number[]) => {
+      if (!isSuperAdmin) return;
       const current = userPermissions[userId] || [];
       const toAdd = selectedIds.filter(id => !current.includes(id));
       const toRemove = current.filter(id => !selectedIds.includes(id));
@@ -367,17 +371,21 @@ const Settings: React.FC = () => {
          <div className="space-y-6">
              <div className="flex justify-between items-center">
                  <h2 className="text-lg font-bold text-slate-800">{t('settings.tab.accounts')}</h2>
-                 <button onClick={() => setIsAddingAccount(!isAddingAccount)} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center">
+                 <button 
+                   onClick={() => isSuperAdmin && setIsAddingAccount(!isAddingAccount)} 
+                   disabled={!isSuperAdmin}
+                   className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
                      <Plus size={16} className="mr-1" /> Add Account
                  </button>
              </div>
 
-             {isAddingAccount && (
-                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 animate-in fade-in">
-                     <h3 className="font-bold text-slate-700 mb-3">New Account Credentials</h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                         <input type="text" placeholder="Account Name (e.g. My Company)" className="border rounded-lg px-3 py-2 text-sm" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} />
-                         <input type="text" placeholder="Issuer ID" className="border rounded-lg px-3 py-2 text-sm" value={newAccount.issuer_id} onChange={e => setNewAccount({...newAccount, issuer_id: e.target.value})} />
+             {isAddingAccount && isSuperAdmin && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 animate-in fade-in">
+                    <h3 className="font-bold text-slate-700 mb-3">New Account Credentials</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <input type="text" placeholder="Account Name (e.g. My Company)" className="border rounded-lg px-3 py-2 text-sm" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} />
+                        <input type="text" placeholder="Issuer ID" className="border rounded-lg px-3 py-2 text-sm" value={newAccount.issuer_id} onChange={e => setNewAccount({...newAccount, issuer_id: e.target.value})} />
                          <input type="text" placeholder="Key ID" className="border rounded-lg px-3 py-2 text-sm" value={newAccount.key_id} onChange={e => setNewAccount({...newAccount, key_id: e.target.value})} />
                      </div>
                      <textarea placeholder="Paste Private Key (.p8 content) here..." className="w-full border rounded-lg px-3 py-2 text-sm font-mono h-32 mb-4" value={newAccount.private_key} onChange={e => setNewAccount({...newAccount, private_key: e.target.value})} />
@@ -405,13 +413,13 @@ const Settings: React.FC = () => {
                          <div className="flex items-center space-x-2">
                             <button 
                                 onClick={() => handleTestConnection(acc.id)} 
-                                disabled={testingConnection === acc.id}
-                                className="flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors"
+                                disabled={testingConnection === acc.id || !isSuperAdmin}
+                                className="flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {testingConnection === acc.id ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
                                 <span>Test Connection</span>
                             </button>
-                            <button onClick={() => handleDeleteAccount(acc.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={18} /></button>
+                            <button onClick={() => isSuperAdmin && handleDeleteAccount(acc.id)} disabled={!isSuperAdmin} className="text-red-500 hover:bg-red-50 p-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"><Trash2 size={18} /></button>
                          </div>
                      </div>
                  ))}
@@ -442,8 +450,9 @@ const Settings: React.FC = () => {
                                   <td className="px-6 py-4">
                                     <select
                                       value={user.role}
-                                      onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'viewer')}
-                                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                                      onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'viewer' | 'superadmin')}
+                                      disabled={!isSuperAdmin}
+                                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       <option value="viewer">viewer</option>
                                       <option value="admin">admin</option>
