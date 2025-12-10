@@ -67,15 +67,37 @@ const Settings: React.FC = () => {
 
   const loadSettings = async () => {
     setLoading(true);
-    const { data } = await supabase.from('settings').select('*').single();
-    if (data) setSettings(data as SystemSettings);
+    try {
+      if (session?.access_token) {
+        const res = await axios.post('/api/admin', 
+          { action: 'get_settings' },
+          { headers: { Authorization: `Bearer ${session.access_token}` } }
+        );
+        if (res.data?.settings) {
+          setSettings(res.data.settings as SystemSettings);
+        }
+      }
+    } catch (e) {
+      console.error('Load settings failed', e);
+    }
     setLoading(false);
   };
 
   const loadAccounts = async () => {
     setLoading(true);
-    const { data } = await supabase.from('apple_accounts').select('id, name, issuer_id, key_id');
-    if (data) setAccounts(data as AppleAccount[]);
+    try {
+      if (session?.access_token) {
+        const res = await axios.post('/api/admin',
+          { action: 'list_accounts' },
+          { headers: { Authorization: `Bearer ${session.access_token}` } }
+        );
+        if (res.data?.accounts) {
+          setAccounts(res.data.accounts as AppleAccount[]);
+        }
+      }
+    } catch (e) {
+      console.error('Load accounts failed', e);
+    }
     setLoading(false);
   };
 

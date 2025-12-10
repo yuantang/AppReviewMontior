@@ -75,6 +75,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (action === 'list_apps_from_apple') {
         return await handleListApps(res, accountId);
     }
+    else if (action === 'list_accounts') {
+        return await handleListAccounts(res, client);
+    }
+    else if (action === 'get_settings') {
+        return await handleGetSettings(res, client);
+    }
     else if (action === 'add_account') {
         return await handleAddAccount(res, account, client);
     }
@@ -125,6 +131,24 @@ async function handleListApps(res: VercelResponse, accountId: number) {
 
     const apps = await fetchAppsList(token);
     return res.status(200).json({ success: true, apps });
+}
+
+async function handleListAccounts(res: VercelResponse, client: SupabaseClient) {
+    const { data, error } = await client
+      .from('apple_accounts')
+      .select('id,name,issuer_id,key_id');
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true, accounts: data });
+}
+
+async function handleGetSettings(res: VercelResponse, client: SupabaseClient) {
+    const { data, error } = await client.from('settings').select('*').single();
+    if (error) {
+        return res.status(500).json({ error: error.message, details: error });
+    }
+    return res.status(200).json({ success: true, settings: data });
 }
 
 async function handleAddAccount(res: VercelResponse, account: any, client: SupabaseClient) {
