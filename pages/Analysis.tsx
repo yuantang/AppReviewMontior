@@ -67,6 +67,52 @@ const Analysis: React.FC = () => {
     loadData();
   }, [session]);
 
+  const stripMd = (text: string) =>
+    text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/^##\s*/g, '')
+      .replace(/^#\s*/g, '')
+      .trim();
+
+  const renderReport = (text: string | null) => {
+    if (!text) return null;
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const blocks: JSX.Element[] = [];
+    let listBuffer: string[] = [];
+
+    const flushList = () => {
+      if (listBuffer.length === 0) return;
+      blocks.push(
+        <ul className="list-disc pl-5 space-y-1 text-sm text-slate-700" key={`ul-${blocks.length}`}>
+          {listBuffer.map((item, idx) => <li key={idx}>{stripMd(item)}</li>)}
+        </ul>
+      );
+      listBuffer = [];
+    };
+
+    lines.forEach((line, idx) => {
+      if (line.startsWith('## ')) {
+        flushList();
+        blocks.push(
+          <h4 className="text-base font-semibold text-slate-900" key={`h-${idx}`}>
+            {stripMd(line)}
+          </h4>
+        );
+      } else if (/^(\*|-)\s+/.test(line)) {
+        listBuffer.push(line.replace(/^(\*|-)\s+/, ''));
+      } else {
+        flushList();
+        blocks.push(
+          <p className="text-sm text-slate-700 leading-6" key={`p-${idx}`}>
+            {stripMd(line)}
+          </p>
+        );
+      }
+    });
+    flushList();
+    return blocks;
+  };
+
   // 2. Filter Reviews
   const filteredReviews = useMemo(() => {
     if (selectedAppId === 'all') return reviews;
@@ -211,8 +257,8 @@ const Analysis: React.FC = () => {
                 </div>
                 
                 {report ? (
-                    <div className="bg-white p-4 rounded-lg border border-purple-50/50 leading-6 space-y-2 text-slate-700 text-sm">
-                        <div className="whitespace-pre-wrap">{report}</div>
+                    <div className="bg-white p-4 rounded-lg border border-purple-50/50 space-y-2">
+                        {renderReport(report)}
                     </div>
                 ) : (
                     <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-purple-100 rounded-lg">
