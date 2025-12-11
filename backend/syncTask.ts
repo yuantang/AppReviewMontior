@@ -5,6 +5,9 @@ import { supabase } from './supabaseClient';
 import { GoogleGenAI } from "@google/genai";
 import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts';
 
+// Only ingest reviews created on/after this date
+const HISTORICAL_START = new Date('2025-01-01T00:00:00Z');
+
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_GEMINI_KEY" });
 
@@ -81,6 +84,12 @@ export async function runSyncJob() {
       for (const item of reviews) {
         const reviewId = item.id;
         const attributes = item.attributes;
+        const createdAt = new Date(attributes.createdDate);
+
+        // Skip historical data before configured start date
+        if (createdAt < HISTORICAL_START) {
+          continue;
+        }
         
         // 4. Check if exists
         const { data: existing } = await supabase
