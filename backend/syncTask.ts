@@ -61,7 +61,7 @@ async function fetchAllReviewsForYear(appStoreId: string, token: string) {
   const collected: any[] = [];
 
   while (true) {
-    const response = await fetchAppReviews(appStoreId, token, nextUrl);
+    const response = await fetchAppReviews(appStoreId, token, nextUrl, HISTORICAL_START, HISTORICAL_END);
     const batch = response.data || [];
 
     for (const item of batch) {

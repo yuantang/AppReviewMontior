@@ -38,9 +38,20 @@ export const generateAppStoreToken = (credentials: { issuerId: string, keyId: st
 
 /**
  * Fetches reviews for a specific App ID.
+ * Optionally constrain by createdDate range.
  */
-export const fetchAppReviews = async (appStoreId: string, token: string, nextUrl?: string) => {
-  const url = nextUrl || `https://api.appstoreconnect.apple.com/v1/apps/${appStoreId}/customerReviews?sort=-createdDate&include=response&limit=100`;
+export const fetchAppReviews = async (
+  appStoreId: string,
+  token: string,
+  nextUrl?: string,
+  startDate?: Date,
+  endDate?: Date
+) => {
+  const rangeParam = startDate && endDate
+    ? `&filter[createdDate]=${startDate.toISOString()}..${endDate.toISOString()}`
+    : '';
+
+  const url = nextUrl || `https://api.appstoreconnect.apple.com/v1/apps/${appStoreId}/customerReviews?sort=-createdDate&include=response&limit=200${rangeParam}`;
   
   try {
     const response = await axios.get(url, {
