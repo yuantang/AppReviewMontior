@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-import { generateAppStoreToken } from '../backend/appStoreService';
+import { generateAppStoreToken } from '../backend/appStoreService.js';
 
 // Initialize Supabase Client
 const supabase = createClient(
