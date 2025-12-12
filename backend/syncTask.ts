@@ -1,6 +1,6 @@
 
 import { appStoreConfig } from '../appStoreConfig.js';
-import { generateAppStoreToken, fetchAppReviews } from './appStoreService';
+import { generateAppStoreToken, fetchAppReviews } from './appStoreService.js';
 import { supabase } from './supabaseClient';
 import { GoogleGenAI } from "@google/genai";
 import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts';
