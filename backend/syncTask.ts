@@ -1,5 +1,5 @@
 
-import { appStoreConfig } from '../appStoreConfig';
+import { appStoreConfig } from '../appStoreConfig.js';
 import { generateAppStoreToken, fetchAppReviews } from './appStoreService';
 import { supabase } from './supabaseClient';
 import { GoogleGenAI } from "@google/genai";
