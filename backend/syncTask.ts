@@ -5,10 +5,6 @@ import { supabase } from './supabaseClient.js';
 import { GoogleGenAI } from "@google/genai";
 import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts.js';
 
-// Only ingest reviews within 2025
-const HISTORICAL_START = new Date('2025-01-01T00:00:00Z');
-const HISTORICAL_END = new Date('2025-12-31T23:59:59Z');
-
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_GEMINI_KEY" });
 
@@ -55,8 +51,8 @@ async function analyzeReview(reviewBody: string, title: string, rating: number) 
   }
 }
 
-// Fetch all reviews for an app across pagination, stop when older than HISTORICAL_START
-async function fetchAllReviewsForYear(appStoreId: string, token: string, start?: Date, end?: Date) {
+// Fetch all reviews for an app across pagination, filtered by optional date range
+async function fetchAllReviewsWithRange(appStoreId: string, token: string, start?: Date, end?: Date) {
   let nextUrl: string | undefined;
   const collected: any[] = [];
 
@@ -66,11 +62,9 @@ async function fetchAllReviewsForYear(appStoreId: string, token: string, start?:
 
     for (const item of batch) {
       const createdAt = new Date(item.attributes.createdDate);
-      // Collect任何处于目标年份区间的数据；不提前中断，以防排序变化遗漏 2025 数据
-      if (createdAt >= HISTORICAL_START && createdAt <= HISTORICAL_END) {
-        collected.push(item);
-      }
-      // 其他年份数据直接忽略，但继续翻页直到没有 next
+      if (start && createdAt < start) continue;
+      if (end && createdAt > end) continue;
+      collected.push(item);
     }
 
     const nextLink = (response.links?.next as any)?.href || response.links?.next;
@@ -94,8 +88,12 @@ type SyncOptions = {
 
 export async function runSyncJob(options?: SyncOptions) {
   console.log("⏰ Starting Sync Job...");
-  const rangeStart = options?.startDate === 'all' ? undefined : options?.startDate ? new Date(options.startDate) : HISTORICAL_START;
-  const rangeEnd = options?.endDate === 'all' ? undefined : options?.endDate ? new Date(options.endDate) : HISTORICAL_END;
+  // Default窗口：最近30天；传'all'表示不限制
+  const defaultEnd = new Date();
+  const defaultStart = new Date();
+  defaultStart.setDate(defaultStart.getDate() - 30);
+  const rangeStart = options?.startDate === 'all' ? undefined : options?.startDate ? new Date(options.startDate) : defaultStart;
+  const rangeEnd = options?.endDate === 'all' ? undefined : options?.endDate ? new Date(options.endDate) : defaultEnd;
 
   // 1. Get Apps to monitor from DB
   const { data: apps, error } = await supabase.from('apps').select('*');
@@ -115,17 +113,16 @@ export async function runSyncJob(options?: SyncOptions) {
     
     try {
       // 3. Fetch latest reviews from Apple
-      const reviews = await fetchAllReviewsForYear(app.app_store_id, token, rangeStart, rangeEnd);
+      const reviews = await fetchAllReviewsWithRange(app.app_store_id, token, rangeStart, rangeEnd);
 
       for (const item of reviews) {
         const reviewId = item.id;
         const attributes = item.attributes;
         const createdAt = new Date(attributes.createdDate);
 
-        // Skip historical data before configured start date
-        if (createdAt < HISTORICAL_START) {
-          continue;
-        }
+        // Apply dynamic range filter for safety
+        if (rangeStart && createdAt < rangeStart) continue;
+        if (rangeEnd && createdAt > rangeEnd) continue;
         
         // 4. Check if exists
         const { data: existing } = await supabase
