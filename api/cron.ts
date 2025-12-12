@@ -4,7 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { GoogleGenAI } from "@google/genai";
 // Explicit .js extension for Node ESM resolution in Vercel bundle
-import { generateAppStoreToken, fetchAppReviews } from '../backend/appStoreService.js';
+import { runSyncJob } from '../backend/syncTask';
 
 // Initialize Clients with safer env handling
 const supabaseUrl =
@@ -96,111 +96,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isCronAuthorized && !isAdmin) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    if (!geminiApiKey) {
-      console.warn('GEMINI_API_KEY missing; proceeding with neutral sentiment/topics');
-    }
-
-    console.log("🚀 Starting Multi-Account Sync...");
-    
-    // 1. Load Global Settings
-    const { data: settings, error: settingsError } = await client.from('settings').select('*').single();
-    if (settingsError) {
-      throw new Error(`Failed to load settings: ${settingsError.message}`);
-    }
-    const webhookUrl = settings?.webhook_url;
-
-    // 2. Fetch All Developer Accounts
-    const { data: accounts, error: accountsError } = await client.from('apple_accounts').select('*');
-    if (accountsError) {
-      throw new Error(`Failed to load apple_accounts: ${accountsError.message}`);
-    }
-    if (!accounts || accounts.length === 0) return res.json({ message: 'No developer accounts found.' });
-
-    let stats = { processed: 0, new: 0, errors: 0 };
-
-    // 3. Loop through Accounts
-    for (const account of accounts) {
-        console.log(`Checking Account: ${account.name}...`);
-        let accountNewCount = 0;
-        
-        try {
-            // A. Generate Token for this account
-            const token = generateAppStoreToken({
-                issuerId: account.issuer_id,
-                keyId: account.key_id,
-                privateKey: account.private_key
-            });
-
-            // B. Fetch Apps linked to this account
-            const { data: apps } = await client.from('apps').select('*').eq('account_id', account.id);
-            if (!apps || apps.length === 0) continue;
-
-            // C. Sync Reviews for these apps
-            for (const app of apps) {
-                try {
-                    const response = await fetchAppReviews(app.app_store_id, token);
-                    const reviews = response.data;
-                    
-                    for (const item of reviews) {
-                        stats.processed++;
-                        const reviewId = item.id;
-                        
-                        // Check if exists
-                        const { data: existing } = await client.from('reviews').select('id, is_edited').eq('review_id', reviewId).single();
-                        if (existing && !existing.is_edited) continue;
-
-                        stats.new++;
-                        accountNewCount++;
-                        const attr = item.attributes;
-                        const analysis = await analyzeReview(attr.body);
-                        
-                        const reviewData = {
-                            app_id: app.id,
-                            review_id: reviewId,
-                            user_name: attr.reviewerNickname,
-                            title: attr.title,
-                            body: attr.body,
-                            rating: attr.rating,
-                            territory: attr.territory,
-                            created_at_store: attr.createdDate,
-                            sentiment: analysis.sentiment,
-                            topics: analysis.topics,
-                            need_reply: attr.rating <= 2 || analysis.topics.includes('crash'),
-                            updated_at: new Date().toISOString()
-                        };
-
-                        await client.from('reviews').upsert(reviewData, { onConflict: 'review_id' });
-
-                        if (!existing && reviewData.rating <= (settings?.notify_threshold || 2)) {
-                             await sendNotification(webhookUrl, reviewData, app.name);
-                        }
-                    }
-                } catch (err: any) {
-                    console.error(`Failed to sync app ${app.name}`, err);
-                    stats.errors++;
-                }
-            }
-            // Log Success for Account
-            await client.from('sync_logs').insert({
-              account_id: account.id,
-              status: 'success',
-              new_reviews_count: accountNewCount,
-              message: `Synced ${apps.length} apps successfully.`
-            });
-
-        } catch (accErr: any) {
-            console.error(`Failed to process account ${account.name}`, accErr);
-            stats.errors++;
-            // Log Failure for Account
-            await client.from('sync_logs').insert({
-              account_id: account.id,
-              status: 'failed',
-              message: accErr?.message || 'Unknown error'
-            });
-        }
-    }
-
-    return res.status(200).json({ success: true, stats });
+    const body = (req.method === 'POST' ? req.body : {}) as any;
+    const { startDate, endDate, accountId, appId } = body;
+    await runSyncJob({ startDate, endDate, accountId: accountId ? Number(accountId) : undefined, appId: appId ? Number(appId) : undefined });
+    return res.status(200).json({ success: true });
 
   } catch (error: any) {
     console.error("Sync Fatal Error:", error);

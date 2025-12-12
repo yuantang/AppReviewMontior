@@ -56,12 +56,12 @@ async function analyzeReview(reviewBody: string, title: string, rating: number) 
 }
 
 // Fetch all reviews for an app across pagination, stop when older than HISTORICAL_START
-async function fetchAllReviewsForYear(appStoreId: string, token: string) {
+async function fetchAllReviewsForYear(appStoreId: string, token: string, start?: Date, end?: Date) {
   let nextUrl: string | undefined;
   const collected: any[] = [];
 
   while (true) {
-    const response = await fetchAppReviews(appStoreId, token, nextUrl, HISTORICAL_START, HISTORICAL_END);
+    const response = await fetchAppReviews(appStoreId, token, nextUrl, start, end);
     const batch = response.data || [];
 
     for (const item of batch) {
@@ -85,8 +85,17 @@ async function fetchAllReviewsForYear(appStoreId: string, token: string) {
  * MAIN JOB: Sync Reviews
  * This function should be called by your Cron Scheduler (e.g., every 10 mins).
  */
-export async function runSyncJob() {
+type SyncOptions = {
+  startDate?: string | 'all';
+  endDate?: string | 'all';
+  accountId?: number;
+  appId?: number;
+};
+
+export async function runSyncJob(options?: SyncOptions) {
   console.log("⏰ Starting Sync Job...");
+  const rangeStart = options?.startDate === 'all' ? undefined : options?.startDate ? new Date(options.startDate) : HISTORICAL_START;
+  const rangeEnd = options?.endDate === 'all' ? undefined : options?.endDate ? new Date(options.endDate) : HISTORICAL_END;
 
   // 1. Get Apps to monitor from DB
   const { data: apps, error } = await supabase.from('apps').select('*');
@@ -98,12 +107,15 @@ export async function runSyncJob() {
   // 2. Generate Apple Token (Shared for all calls in this batch)
   const token = generateAppStoreToken(appStoreConfig);
 
-  for (const app of apps) {
+  const targetApps = options?.appId ? apps.filter(a => a.id === options.appId) : apps;
+
+  for (const app of targetApps) {
+    if (options?.accountId && app.account_id !== options.accountId) continue;
     console.log(`Processing App: ${app.name} (${app.app_store_id})...`);
     
     try {
       // 3. Fetch latest reviews from Apple
-      const reviews = await fetchAllReviewsForYear(app.app_store_id, token);
+      const reviews = await fetchAllReviewsForYear(app.app_store_id, token, rangeStart, rangeEnd);
 
       for (const item of reviews) {
         const reviewId = item.id;

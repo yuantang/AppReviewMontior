@@ -17,6 +17,9 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
+  const [syncRange, setSyncRange] = useState<'2025' | 'all'>('2025');
+  const [syncAccountId, setSyncAccountId] = useState<'all' | number>('all');
+  const [syncAppId, setSyncAppId] = useState<'all' | number>('all');
   
   // General Settings
   const [settings, setSettings] = useState<SystemSettings>({
@@ -69,6 +72,9 @@ const Settings: React.FC = () => {
     setLoading(true);
     try {
       if (session?.access_token) {
+        // preload accounts/apps for sync filters
+        loadAccounts();
+        loadAppsForSync();
         const res = await axios.post('/api/admin', 
           { action: 'get_settings' },
           { headers: { Authorization: `Bearer ${session.access_token}` } }
@@ -99,6 +105,17 @@ const Settings: React.FC = () => {
       console.error('Load accounts failed', e);
     }
     setLoading(false);
+  };
+
+  const loadAppsForSync = async () => {
+    try {
+      if (session?.access_token) {
+        const res = await axios.post('/api/admin', { action: 'list_apps' }, { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (res.data?.apps) setAllApps(res.data.apps as AppProduct[]);
+      }
+    } catch (e) {
+      console.error('Load apps failed', e);
+    }
   };
 
   const loadUsersAndPermissions = async () => {
@@ -288,8 +305,19 @@ const Settings: React.FC = () => {
     if (!confirm("Start manual sync?")) return;
     setSyncing(true);
     try {
-      const response = await axios.get('/api/cron', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-      alert(response.data.success ? `Sync Complete! Found ${response.data.stats.new} new reviews.` : "Sync finished unexpectedly.");
+      const body: any = {};
+      if (syncRange === '2025') {
+        body.startDate = '2025-01-01T00:00:00Z';
+        body.endDate = '2025-12-31T23:59:59Z';
+      } else {
+        body.startDate = 'all';
+        body.endDate = 'all';
+      }
+      if (syncAccountId !== 'all') body.accountId = syncAccountId;
+      if (syncAppId !== 'all') body.appId = syncAppId;
+
+      const response = await axios.post('/api/cron', body, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+      alert(response.data.success ? `Sync triggered successfully.` : "Sync finished unexpectedly.");
       if (activeTab === 'logs') loadLogs();
     } catch (e: any) {
       alert("Sync failed: " + (e.response?.data?.error || e.message));
@@ -360,15 +388,56 @@ const Settings: React.FC = () => {
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><RefreshCw className="mr-2 text-blue-500" /> {t('settings.gen.sync')}</h2>
-              <div className="flex items-center justify-between">
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                      <p className="text-sm font-medium text-slate-700">{t('settings.gen.manual_sync')}</p>
-                      <p className="text-xs text-slate-400">{t('settings.gen.sync_desc')}</p>
+                    <p className="text-xs text-slate-500 mb-1">时间范围</p>
+                    <select
+                      value={syncRange}
+                      onChange={(e) => setSyncRange(e.target.value as '2025' | 'all')}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="2025">2025 全年</option>
+                      <option value="all">全部历史</option>
+                    </select>
                   </div>
-                  <button onClick={handleManualSync} disabled={syncing} className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-sm font-medium">
-                      {syncing ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
-                      <span>{syncing ? t('common.loading') : t('settings.gen.sync_now')}</span>
-                  </button>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">开发者账号</p>
+                    <select
+                      value={syncAccountId}
+                      onChange={(e) => { const val = e.target.value === 'all' ? 'all' : Number(e.target.value); setSyncAccountId(val); setSyncAppId('all'); }}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="all">全部账号</option>
+                      {accounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">应用</p>
+                    <select
+                      value={syncAppId}
+                      onChange={(e) => setSyncAppId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="all">全部应用</option>
+                      {(syncAccountId === 'all' ? allApps : allApps.filter(a => a.account_id === syncAccountId)).map(app => (
+                        <option key={app.id} value={app.id}>{app.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-slate-700">{t('settings.gen.manual_sync')}</p>
+                        <p className="text-xs text-slate-400">{t('settings.gen.sync_desc')}</p>
+                    </div>
+                    <button onClick={handleManualSync} disabled={syncing} className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-sm font-medium">
+                        {syncing ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
+                        <span>{syncing ? t('common.loading') : t('settings.gen.sync_now')}</span>
+                    </button>
+                </div>
               </div>
           </div>
         </div>

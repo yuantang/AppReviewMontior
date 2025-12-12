@@ -47,9 +47,12 @@ export const fetchAppReviews = async (
   startDate?: Date,
   endDate?: Date
 ) => {
-  const rangeParam = startDate && endDate
-    ? `&filter[createdDate]=${startDate.toISOString()}..${endDate.toISOString()}`
-    : '';
+  let rangeParam = '';
+  if (startDate || endDate) {
+    const start = startDate ? startDate.toISOString() : '';
+    const end = endDate ? endDate.toISOString() : '';
+    rangeParam = `&filter[createdDate]=${start}..${end}`;
+  }
 
   const url = nextUrl || `https://api.appstoreconnect.apple.com/v1/apps/${appStoreId}/customerReviews?sort=-createdDate&include=response&limit=200${rangeParam}`;
   
