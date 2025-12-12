@@ -18,19 +18,12 @@ const envKeyId = process.env.APPSTORE_KEY_ID;
 const rawPk = process.env.APPSTORE_PRIVATE_KEY;
 const envPrivateKey = rawPk ? rawPk.replace(/\\n/g, '\n') : undefined;
 
-// Validate presence to avoid silent fallback to placeholders
-if (!envIssuerId || !envKeyId || !envPrivateKey) {
-  throw new Error('Missing App Store credentials. Please set APPSTORE_ISSUER_ID, APPSTORE_KEY_ID, APPSTORE_PRIVATE_KEY.');
-}
-
-// Basic sanity check for PEM format
-if (!envPrivateKey.includes('BEGIN PRIVATE KEY') || !envPrivateKey.includes('END PRIVATE KEY')) {
-  throw new Error('APPSTORE_PRIVATE_KEY is not a valid PEM (missing BEGIN/END headers).');
-}
-
 export const appStoreConfig: AppStoreConfig = {
-  issuerId: envIssuerId,
-  keyId: envKeyId,
-  privateKey: envPrivateKey,
+  // 如果从环境读取不到，则使用占位符（对于从数据库动态读取的场景，调用方应自行传入真实凭证）
+  issuerId: envIssuerId || 'YOUR_ISSUER_ID_HERE',
+  keyId: envKeyId || 'YOUR_KEY_ID_HERE',
+  privateKey: envPrivateKey || `-----BEGIN PRIVATE KEY-----
+YOUR_PRIVATE_KEY_CONTENT_HERE
+-----END PRIVATE KEY-----`,
   vendorNumber: process.env.APPSTORE_VENDOR_NUMBER || ''
 };
