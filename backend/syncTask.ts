@@ -5,8 +5,9 @@ import { supabase } from './supabaseClient';
 import { GoogleGenAI } from "@google/genai";
 import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts';
 
-// Only ingest reviews created on/after this date
+// Only ingest reviews within 2025
 const HISTORICAL_START = new Date('2025-01-01T00:00:00Z');
+const HISTORICAL_END = new Date('2025-12-31T23:59:59Z');
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_GEMINI_KEY" });
@@ -54,6 +55,35 @@ async function analyzeReview(reviewBody: string, title: string, rating: number) 
   }
 }
 
+// Fetch all reviews for an app across pagination, stop when older than HISTORICAL_START
+async function fetchAllReviewsForYear(appStoreId: string, token: string) {
+  let nextUrl: string | undefined;
+  const collected: any[] = [];
+
+  while (true) {
+    const response = await fetchAppReviews(appStoreId, token, nextUrl);
+    const batch = response.data || [];
+
+    for (const item of batch) {
+      const createdAt = new Date(item.attributes.createdDate);
+      if (createdAt < HISTORICAL_START) {
+        // reached older data, stop collecting
+        return collected;
+      }
+      if (createdAt <= HISTORICAL_END) {
+        collected.push(item);
+      }
+      // if greater than end (future), skip but continue
+    }
+
+    const nextLink = (response.links?.next as any)?.href || response.links?.next;
+    if (!nextLink) break;
+    nextUrl = nextLink;
+  }
+
+  return collected;
+}
+
 /**
  * MAIN JOB: Sync Reviews
  * This function should be called by your Cron Scheduler (e.g., every 10 mins).
@@ -76,10 +106,7 @@ export async function runSyncJob() {
     
     try {
       // 3. Fetch latest reviews from Apple
-      // In production, you might check 'sync_log' to know the last processed date
-      // to avoid fetching too much history.
-      const response = await fetchAppReviews(app.app_store_id, token);
-      const reviews = response.data;
+      const reviews = await fetchAllReviewsForYear(app.app_store_id, token);
 
       for (const item of reviews) {
         const reviewId = item.id;
