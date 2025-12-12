@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: { user } } = await client.auth.getUser(token);
       if (user) {
          const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).single();
-         if (profile?.role === 'admin') isAdmin = true;
+         if (profile?.role === 'admin' || profile?.role === 'superadmin') isAdmin = true;
       }
     }
   }
