@@ -1,7 +1,7 @@
 
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
-import { AppStoreConfig } from '../types';
+import { AppStoreConfig } from '../types.js';
 
 /**
  * BACKEND SERVICE - NODE.JS

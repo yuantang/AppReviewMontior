@@ -1,9 +1,9 @@
 
 import { appStoreConfig } from '../appStoreConfig.js';
 import { generateAppStoreToken, fetchAppReviews } from './appStoreService.js';
-import { supabase } from './supabaseClient';
+import { supabase } from './supabaseClient.js';
 import { GoogleGenAI } from "@google/genai";
-import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts';
+import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts.js';
 
 // Only ingest reviews within 2025
 const HISTORICAL_START = new Date('2025-01-01T00:00:00Z');
