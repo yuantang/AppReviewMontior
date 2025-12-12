@@ -4,7 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { GoogleGenAI } from "@google/genai";
 // Explicit .js extension for Node ESM resolution in Vercel bundle
-import { runSyncJob } from '../backend/syncTask';
+import { runSyncJob } from '../backend/syncTask.js';
 
 // Initialize Clients with safer env handling
 const supabaseUrl =
