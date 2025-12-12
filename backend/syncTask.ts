@@ -66,14 +66,11 @@ async function fetchAllReviewsForYear(appStoreId: string, token: string) {
 
     for (const item of batch) {
       const createdAt = new Date(item.attributes.createdDate);
-      if (createdAt < HISTORICAL_START) {
-        // reached older data, stop collecting
-        return collected;
-      }
-      if (createdAt <= HISTORICAL_END) {
+      // Collect任何处于目标年份区间的数据；不提前中断，以防排序变化遗漏 2025 数据
+      if (createdAt >= HISTORICAL_START && createdAt <= HISTORICAL_END) {
         collected.push(item);
       }
-      // if greater than end (future), skip but continue
+      // 其他年份数据直接忽略，但继续翻页直到没有 next
     }
 
     const nextLink = (response.links?.next as any)?.href || response.links?.next;
