@@ -15,6 +15,41 @@ import { useLanguage } from '../contexts/LanguageContext';
 let cachedReviews: Review[] = [];
 let cachedApps: AppProduct[] = [];
 
+const exportToCsv = (rows: Review[]) => {
+  if (!rows.length) return;
+  const headers = [
+    'App',
+    'Reviewer',
+    'Title',
+    'Body',
+    'Rating',
+    'Status',
+    'Created At',
+    'Topics'
+  ];
+  const csvRows = rows.map(r => [
+    r.app_id ?? '',
+    r.user_name ?? '',
+    (r.title || '').replace(/"/g, '""'),
+    (r.body || '').replace(/"/g, '""'),
+    r.rating ?? '',
+    r.status || 'pending',
+    r.created_at_store || '',
+    (r.topics || []).join('|')
+  ].map(val => `"${String(val ?? '')}"`).join(','));
+
+  const csvContent = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `reviews_export_${Date.now()}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 const ReviewList: React.FC = () => {
   const { isAdmin, session } = useAuth();
   const { t } = useLanguage();
@@ -177,7 +212,11 @@ const ReviewList: React.FC = () => {
           >
             <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
+          <button
+            onClick={() => exportToCsv(filteredReviews)}
+            disabled={filteredReviews.length === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Download size={16} />
             <span>{t('reviews.export')}</span>
           </button>
