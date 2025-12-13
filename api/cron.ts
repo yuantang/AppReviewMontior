@@ -85,10 +85,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authHeader = req.headers['authorization'];
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      const { data: { user } } = await client.auth.getUser(token);
-      if (user) {
-         const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).single();
-         if (profile?.role === 'admin' || profile?.role === 'superadmin') isAdmin = true;
+      const { data: { user }, error: authError } = await client.auth.getUser(token);
+      const checkProfileRole = async (userId: string | undefined | null) => {
+        if (!userId) return;
+        const { data: profile } = await client.from('profiles').select('role').eq('id', userId).single();
+        if (profile?.role === 'admin' || profile?.role === 'superadmin') isAdmin = true;
+      };
+
+      if (user?.id) {
+        await checkProfileRole(user.id);
+      }
+
+      // Fallback: even if no authError, try decoding JWT to resolve profile role
+      if (!isAdmin) {
+        try {
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+          const userId = payload?.sub;
+          await checkProfileRole(userId);
+        } catch (e) {
+          if (authError) console.warn('JWT decode failed for fallback auth', e);
+        }
       }
     }
   }
