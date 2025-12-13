@@ -256,7 +256,8 @@ async function handleListReviews(res: VercelResponse, client: SupabaseClient, fi
     }
     if (filters?.app_id) query = query.eq('app_id', filters.app_id);
     if (filters?.rating) query = query.eq('rating', filters.rating);
-    const { data, error } = await query.limit(200);
+    // 返回全部满足条件的评论，不再限制 200，前端自行筛选/分页
+    const { data, error } = await query;
     if (error) {
         return res.status(500).json({ error: error.message, details: error });
     }
