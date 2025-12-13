@@ -102,8 +102,36 @@ export async function runSyncJob(options?: SyncOptions) {
     return;
   }
 
-  // 2. Generate Apple Token (Shared for all calls in this batch)
-  const token = generateAppStoreToken(appStoreConfig);
+  // 2. Load Apple developer accounts to build correct ES256 tokens per account
+  const { data: accounts, error: accErr } = await supabase
+    .from('apple_accounts')
+    .select('id, issuer_id, key_id, private_key');
+
+  if (accErr) {
+    console.error("Failed to fetch apple_accounts:", accErr);
+    return;
+  }
+
+  const tokenCache = new Map<number, string>();
+  const getTokenForAccount = (accountId: number) => {
+    if (tokenCache.has(accountId)) return tokenCache.get(accountId)!;
+    const acc = accounts?.find(a => a.id === accountId);
+    let token: string | null = null;
+
+    if (acc?.issuer_id && acc?.key_id && acc?.private_key) {
+      token = generateAppStoreToken({
+        issuerId: acc.issuer_id.trim(),
+        keyId: acc.key_id.trim(),
+        privateKey: acc.private_key.trim()
+      });
+    } else {
+      // fallback to legacy env-based config
+      token = generateAppStoreToken(appStoreConfig);
+    }
+
+    if (token) tokenCache.set(accountId, token);
+    return token;
+  };
 
   const targetApps = options?.appId ? apps.filter(a => a.id === options.appId) : apps;
 
@@ -111,6 +139,13 @@ export async function runSyncJob(options?: SyncOptions) {
     if (options?.accountId && app.account_id !== options.accountId) continue;
     console.log(`Processing App: ${app.name} (${app.app_store_id})...`);
     
+    // Resolve token for the app's owning developer account
+    const token = getTokenForAccount(app.account_id);
+    if (!token) {
+      console.error(`No credentials found for account ${app.account_id}, skipping app ${app.name}`);
+      continue;
+    }
+
     try {
       // 3. Fetch latest reviews from Apple
       const reviews = await fetchAllReviewsWithRange(app.app_store_id, token, rangeStart, rangeEnd);
