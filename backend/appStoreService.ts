@@ -44,17 +44,12 @@ export const fetchAppReviews = async (
   appStoreId: string,
   token: string,
   nextUrl?: string,
-  startDate?: Date,
-  endDate?: Date
+  _startDate?: Date,
+  _endDate?: Date
 ) => {
-  let rangeParam = '';
-  if (startDate || endDate) {
-    const start = startDate ? startDate.toISOString() : '';
-    const end = endDate ? endDate.toISOString() : '';
-    rangeParam = `&filter[createdDate]=${start}..${end}`;
-  }
-
-  const url = nextUrl || `https://api.appstoreconnect.apple.com/v1/apps/${appStoreId}/customerReviews?sort=-createdDate&include=response&limit=200${rangeParam}`;
+  // NOTE: Apple App Store Connect Reviews API does not support createdDate filter.
+  // We paginate all reviews (newest first) and perform client-side filtering.
+  const url = nextUrl || `https://api.appstoreconnect.apple.com/v1/apps/${appStoreId}/customerReviews?sort=-createdDate&include=response&limit=200`;
   
   try {
     const response = await axios.get(url, {
