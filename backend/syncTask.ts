@@ -5,13 +5,15 @@ import { supabase } from './supabaseClient.js';
 import { GoogleGenAI } from "@google/genai";
 import { SENTIMENT_ANALYSIS_PROMPT, TOPIC_EXTRACTION_PROMPT, REPLY_GENERATION_PROMPT } from './ai_prompts.js';
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_GEMINI_KEY" });
+// Initialize Gemini only when key exists; otherwise skip AI gracefully
+const geminiKey = process.env.GEMINI_API_KEY;
+const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
 /**
  * HELPER: Run AI Analysis on a single review
  */
 async function analyzeReview(reviewBody: string, title: string, rating: number) {
+  if (!ai) return { sentiment: 'neutral', topics: [] };
   try {
     const model = 'gemini-2.5-flash';
 
