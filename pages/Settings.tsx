@@ -17,7 +17,7 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
-  const [syncRange, setSyncRange] = useState<'2025' | 'all'>('2025');
+  const [syncRange, setSyncRange] = useState<'30d' | '90d' | '180d' | '2025' | 'all'>('30d');
   const [syncAccountId, setSyncAccountId] = useState<'all' | number>('all');
   const [syncAppId, setSyncAppId] = useState<'all' | number>('all');
   
@@ -306,13 +306,33 @@ const Settings: React.FC = () => {
     setSyncing(true);
     try {
       const body: any = {};
-      if (syncRange === '2025') {
-        body.startDate = '2025-01-01T00:00:00Z';
-        body.endDate = '2025-12-31T23:59:59Z';
-      } else {
-        body.startDate = 'all';
-        body.endDate = 'all';
-      }
+      const now = new Date();
+      const rangeMap: Record<typeof syncRange, () => { start: string | 'all', end: string | 'all' }> = {
+        '30d': () => {
+          const start = new Date(now);
+          start.setDate(start.getDate() - 30);
+          return { start: start.toISOString(), end: now.toISOString() };
+        },
+        '90d': () => {
+          const start = new Date(now);
+          start.setDate(start.getDate() - 90);
+          return { start: start.toISOString(), end: now.toISOString() };
+        },
+        '180d': () => {
+          const start = new Date(now);
+          start.setDate(start.getDate() - 180);
+          return { start: start.toISOString(), end: now.toISOString() };
+        },
+        '2025': () => ({
+          start: '2025-01-01T00:00:00Z',
+          end: '2025-12-31T23:59:59Z'
+        }),
+        'all': () => ({ start: 'all', end: 'all' })
+      };
+
+      const range = rangeMap[syncRange]();
+      body.startDate = range.start;
+      body.endDate = range.end;
       if (syncAccountId !== 'all') body.accountId = syncAccountId;
       if (syncAppId !== 'all') body.appId = syncAppId;
 
@@ -396,9 +416,12 @@ const Settings: React.FC = () => {
                     <p className="text-xs text-slate-500 mb-1">时间范围</p>
                     <select
                       value={syncRange}
-                      onChange={(e) => setSyncRange(e.target.value as '2025' | 'all')}
+                      onChange={(e) => setSyncRange(e.target.value as typeof syncRange)}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                     >
+                      <option value="30d">最近 30 天（推荐）</option>
+                      <option value="90d">最近 90 天</option>
+                      <option value="180d">最近 180 天</option>
                       <option value="2025">2025 全年</option>
                       <option value="all">全部历史</option>
                     </select>
