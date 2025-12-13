@@ -320,7 +320,9 @@ const Settings: React.FC = () => {
       alert(response.data.success ? `Sync triggered successfully.` : "Sync finished unexpectedly.");
       if (activeTab === 'logs') loadLogs();
     } catch (e: any) {
-      alert("Sync failed: " + (e.response?.data?.error || e.message));
+      const errPayload = e?.response?.data?.error ?? e?.message ?? e;
+      const errText = typeof errPayload === 'string' ? errPayload : JSON.stringify(errPayload);
+      alert("Sync failed: " + errText);
     }
     setSyncing(false);
   };
