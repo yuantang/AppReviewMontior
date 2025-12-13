@@ -112,6 +112,14 @@ export async function runSyncJob(options?: SyncOptions) {
     return;
   }
 
+  const hasEnvAppStoreConfig =
+    appStoreConfig.issuerId &&
+    !appStoreConfig.issuerId.includes('YOUR_') &&
+    appStoreConfig.keyId &&
+    !appStoreConfig.keyId.includes('YOUR_') &&
+    appStoreConfig.privateKey &&
+    !appStoreConfig.privateKey.includes('YOUR_PRIVATE_KEY_CONTENT_HERE');
+
   const tokenCache = new Map<number, string>();
   const getTokenForAccount = (accountId: number) => {
     if (tokenCache.has(accountId)) return tokenCache.get(accountId)!;
@@ -119,14 +127,21 @@ export async function runSyncJob(options?: SyncOptions) {
     let token: string | null = null;
 
     if (acc?.issuer_id && acc?.key_id && acc?.private_key) {
-      token = generateAppStoreToken({
-        issuerId: acc.issuer_id.trim(),
-        keyId: acc.key_id.trim(),
-        privateKey: acc.private_key.trim()
-      });
-    } else {
-      // fallback to legacy env-based config
-      token = generateAppStoreToken(appStoreConfig);
+      try {
+        token = generateAppStoreToken({
+          issuerId: acc.issuer_id.trim(),
+          keyId: acc.key_id.trim(),
+          privateKey: acc.private_key.trim()
+        });
+      } catch (e) {
+        console.error(`Invalid App Store credentials for account ${accountId}:`, (e as any)?.message || e);
+      }
+    } else if (hasEnvAppStoreConfig) {
+      try {
+        token = generateAppStoreToken(appStoreConfig);
+      } catch (e) {
+        console.error('Invalid App Store env credentials:', (e as any)?.message || e);
+      }
     }
 
     if (token) tokenCache.set(accountId, token);
@@ -142,7 +157,7 @@ export async function runSyncJob(options?: SyncOptions) {
     // Resolve token for the app's owning developer account
     const token = getTokenForAccount(app.account_id);
     if (!token) {
-      console.error(`No credentials found for account ${app.account_id}, skipping app ${app.name}`);
+      console.error(`No valid App Store credentials for account ${app.account_id}, skipping app ${app.name}`);
       continue;
     }
 
@@ -207,8 +222,9 @@ export async function runSyncJob(options?: SyncOptions) {
         }
       }
       
-    } catch (err) {
-      console.error(`Failed to process app ${app.name}:`, err);
+    } catch (err: any) {
+      const axiosData = err?.response?.data;
+      console.error(`Failed to process app ${app.name}:`, err?.message || err, axiosData || '');
     }
   }
   
