@@ -77,6 +77,36 @@ async function fetchAllReviewsWithRange(appStoreId: string, token: string, start
   return collected;
 }
 
+// Split large date ranges to reduce timeout risk when syncing long history
+function buildSegments(rangeStart?: Date, rangeEnd?: Date, maxSpanDays = 60): Array<{ start?: Date, end?: Date }> {
+  // If no range specified, single open segment
+  if (!rangeStart && !rangeEnd) return [{ start: undefined, end: undefined }];
+
+  const start = rangeStart ? new Date(rangeStart) : undefined;
+  const end = rangeEnd ? new Date(rangeEnd) : undefined;
+
+  // If either bound missing, treat as single segment
+  if (!start || !end) return [{ start, end }];
+
+  const segments: Array<{ start: Date, end: Date }> = [];
+  let cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const finalEnd = new Date(end);
+  finalEnd.setHours(23, 59, 59, 999);
+
+  while (cursor <= finalEnd) {
+    const segStart = new Date(cursor);
+    const segEnd = new Date(cursor);
+    segEnd.setDate(segEnd.getDate() + maxSpanDays - 1);
+    if (segEnd > finalEnd) segEnd.setTime(finalEnd.getTime());
+    segments.push({ start: segStart, end: segEnd });
+    // move cursor
+    cursor.setDate(cursor.getDate() + maxSpanDays);
+  }
+
+  return segments;
+}
+
 /**
  * MAIN JOB: Sync Reviews
  * This function should be called by your Cron Scheduler (e.g., every 10 mins).
@@ -164,8 +194,14 @@ export async function runSyncJob(options?: SyncOptions) {
     }
 
     try {
-      // 3. Fetch latest reviews from Apple
-      const reviews = await fetchAllReviewsWithRange(app.app_store_id, token, rangeStart, rangeEnd);
+      // 3. Fetch reviews in smaller date segments to avoid timeouts
+      const segments = buildSegments(rangeStart, rangeEnd, 60);
+      const reviews: any[] = [];
+
+      for (const seg of segments) {
+        const batch = await fetchAllReviewsWithRange(app.app_store_id, token, seg.start, seg.end);
+        reviews.push(...batch);
+      }
 
       for (const item of reviews) {
         const reviewId = item.id;
