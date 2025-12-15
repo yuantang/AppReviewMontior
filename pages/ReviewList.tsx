@@ -65,11 +65,17 @@ const ReviewList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Date Range State
+  const defaultFrom = new Date();
+  defaultFrom.setDate(defaultFrom.getDate() - 30);
   const [dateRange, setDateRange] = useState<DateRange>({
-    from: null,
-    to: null,
-    label: 'All Time'
+    from: defaultFrom,
+    to: new Date(),
+    label: 'Last 30 Days'
   });
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   // User History Modal State
   const [historyModalUser, setHistoryModalUser] = useState<string | null>(null);
@@ -183,6 +189,12 @@ const ReviewList: React.FC = () => {
     });
   }, [reviews, selectedApp, filterRating, filterStatus, searchTerm, dateRange]);
 
+  const pagedReviews = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredReviews.slice(start, end);
+  }, [filteredReviews, page]);
+
   return (
     <div className="p-8 max-w-5xl mx-auto h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
       
@@ -278,7 +290,7 @@ const ReviewList: React.FC = () => {
             <option value={1}>1 Star</option>
           </select>
 
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <DateRangePicker value={dateRange} onChange={(r) => { setDateRange(r); setPage(1); }} />
         </div>
       </div>
 
@@ -288,7 +300,7 @@ const ReviewList: React.FC = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         ) : filteredReviews.length > 0 ? (
-          filteredReviews.map(review => {
+          pagedReviews.map(review => {
             const app = apps.find(a => a.id === review.app_id);
             return (
               <ReviewCard 
@@ -312,6 +324,26 @@ const ReviewList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {filteredReviews.length > pageSize && (
+        <div className="flex justify-center items-center space-x-3 mt-6">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <span className="text-sm text-slate-600">{page} / {Math.ceil(filteredReviews.length / pageSize)}</span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= Math.ceil(filteredReviews.length / pageSize)}
+            className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {/* User History Modal */}
       <UserHistoryModal 

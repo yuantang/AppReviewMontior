@@ -12,6 +12,8 @@ import { generateAnalysisReport } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import DateRangePicker, { DateRange } from '../components/DateRangePicker';
+import DateRangePicker, { DateRange } from '../components/DateRangePicker';
 
 // Simple in-memory cache to avoid refetch on tab switch
 let cachedReviews: Review[] = [];
@@ -23,6 +25,20 @@ const Analysis: React.FC = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [apps, setApps] = useState<AppProduct[]>([]);
   const [selectedAppId, setSelectedAppId] = useState<number | 'all'>('all');
+  const defaultFrom = new Date();
+  defaultFrom.setDate(defaultFrom.getDate() - 30);
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: defaultFrom,
+    to: new Date(),
+    label: 'Last 30 Days'
+  });
+  const defaultFrom = new Date();
+  defaultFrom.setDate(defaultFrom.getDate() - 30);
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: defaultFrom,
+    to: new Date(),
+    label: 'Last 30 Days'
+  });
   const [loading, setLoading] = useState(false);
   
   // AI Report State
@@ -115,9 +131,16 @@ const Analysis: React.FC = () => {
 
   // 2. Filter Reviews
   const filteredReviews = useMemo(() => {
-    if (selectedAppId === 'all') return reviews;
-    return reviews.filter(r => r.app_id === selectedAppId);
-  }, [reviews, selectedAppId]);
+    return reviews.filter(r => {
+      const matchApp = selectedAppId === 'all' || r.app_id === selectedAppId;
+      let matchTime = true;
+      if (dateRange.from && dateRange.to) {
+        const d = new Date(r.created_at_store);
+        matchTime = d >= dateRange.from && d <= dateRange.to;
+      }
+      return matchApp && matchTime;
+    });
+  }, [reviews, selectedAppId, dateRange]);
 
   // --- AI Report Generation ---
   const handleGenerateReport = async () => {
@@ -212,18 +235,21 @@ const Analysis: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-             <Filter size={16} className="text-slate-400 ml-2" />
-             <select 
-                className="appearance-none bg-transparent border-none text-slate-700 text-sm pl-2 pr-8 py-1.5 focus:ring-0 outline-none cursor-pointer font-medium"
-                value={selectedAppId}
-                onChange={(e) => setSelectedAppId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-             >
-                <option value="all">{t('common.all_apps')}</option>
-                {apps.map(app => (
-                    <option key={app.id} value={app.id}>{app.name}</option>
-                ))}
-             </select>
+        <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+          <div className="flex items-center space-x-2">
+            <Filter size={16} className="text-slate-400 ml-2" />
+            <select 
+              className="appearance-none bg-transparent border-none text-slate-700 text-sm pl-2 pr-8 py-1.5 focus:ring-0 outline-none cursor-pointer font-medium"
+              value={selectedAppId}
+              onChange={(e) => setSelectedAppId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            >
+              <option value="all">{t('common.all_apps')}</option>
+              {apps.map(app => (
+                  <option key={app.id} value={app.id}>{app.name}</option>
+              ))}
+            </select>
+          </div>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
         </div>
       </div>
 
