@@ -14,10 +14,6 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import DateRangePicker, { DateRange } from '../components/DateRangePicker';
 
-// Simple in-memory cache to avoid refetch on tab switch
-let cachedReviews: Review[] = [];
-let cachedApps: AppProduct[] = [];
-
 const Analysis: React.FC = () => {
   const { t } = useLanguage();
   const { session } = useAuth();
@@ -41,13 +37,6 @@ const Analysis: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      if (cachedReviews.length > 0 || cachedApps.length > 0) {
-        setReviews(cachedReviews);
-        setApps(cachedApps);
-        setLoading(false);
-        return;
-      }
-
       if (isSupabaseConfigured()) {
         try {
           const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
@@ -59,8 +48,6 @@ const Analysis: React.FC = () => {
           const dbApps = appsRes.data?.apps || [];
           setReviews(dbReviews);
           setApps(dbApps);
-          cachedReviews = dbReviews;
-          cachedApps = dbApps;
         } catch (e) {
           console.error("Analysis load error", e);
           setReviews([]);

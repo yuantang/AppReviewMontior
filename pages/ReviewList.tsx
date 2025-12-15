@@ -11,10 +11,6 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
-// Simple cache to avoid refetch when switching tabs
-let cachedReviews: Review[] = [];
-let cachedApps: AppProduct[] = [];
-
 const exportToCsv = (rows: Review[]) => {
   if (!rows.length) return;
   const headers = [
@@ -84,14 +80,6 @@ const ReviewList: React.FC = () => {
     setIsLoading(true);
     
     try {
-      if (cachedReviews.length > 0 || cachedApps.length > 0) {
-        setReviews(cachedReviews);
-        setApps(cachedApps);
-        setUsingMockData(false);
-        setIsLoading(false);
-        return;
-      }
-
       if (isSupabaseConfigured()) {
         const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
         const [reviewsRes, appsRes] = await Promise.all([
@@ -104,8 +92,6 @@ const ReviewList: React.FC = () => {
         if (dbReviews.length > 0) {
           setReviews(dbReviews);
           setApps(dbApps);
-          cachedReviews = dbReviews;
-          cachedApps = dbApps;
           setUsingMockData(false);
         } else {
           setReviews(MOCK_REVIEWS);
