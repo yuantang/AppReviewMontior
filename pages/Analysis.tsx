@@ -13,7 +13,6 @@ import { useLanguage } from '../contexts/LanguageContext';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import DateRangePicker, { DateRange } from '../components/DateRangePicker';
-import DateRangePicker, { DateRange } from '../components/DateRangePicker';
 
 // Simple in-memory cache to avoid refetch on tab switch
 let cachedReviews: Review[] = [];
@@ -25,13 +24,6 @@ const Analysis: React.FC = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [apps, setApps] = useState<AppProduct[]>([]);
   const [selectedAppId, setSelectedAppId] = useState<number | 'all'>('all');
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 30);
-  const [dateRange, setDateRange] = useState<DateRange>({
-    from: defaultFrom,
-    to: new Date(),
-    label: 'Last 30 Days'
-  });
   const defaultFrom = new Date();
   defaultFrom.setDate(defaultFrom.getDate() - 30);
   const [dateRange, setDateRange] = useState<DateRange>({
