@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
         if (isSupabaseConfigured()) {
           const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
           const [reviewsRes, appsRes] = await Promise.all([
-            axios.post('/api/admin', { action: 'list_reviews' }, { headers: authHeader }),
+            axios.post('/api/admin', { action: 'list_reviews', mode: 'full' }, { headers: authHeader }),
             axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
           ]);
 

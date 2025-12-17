@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleListAppsFromDb(res, client, userAppIds, isSuperAdmin);
     }
     else if (action === 'list_reviews') {
-        return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin, req.body?.page, req.body?.pageSize);
+        return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin, req.body?.page, req.body?.pageSize, req.body?.mode);
     }
     else if (action === 'list_users') {
         // Allow admin/superadmin to view users
@@ -248,10 +248,11 @@ async function handleSetUserRole(res: VercelResponse, client: SupabaseClient, us
     return res.status(200).json({ success: true });
 }
 
-async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isSuperAdmin: boolean, pageParam?: number, pageSizeParam?: number) {
+async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isSuperAdmin: boolean, pageParam?: number, pageSizeParam?: number, mode?: string) {
+    const fetchAll = mode === 'full';
     const page = Math.max(1, Number(pageParam) || 1);
-    const pageSize = Math.min(200, Math.max(1, Number(pageSizeParam) || 50));
-    let query = client.from('reviews').select('*', { count: 'exact' }).order('created_at_store', { ascending: false });
+    const pageSize = Math.min(500, Math.max(1, Number(pageSizeParam) || 50));
+    let query = client.from('reviews').select('*', { count: fetchAll ? 'exact' : 'estimated' }).order('created_at_store', { ascending: false });
     if (!isSuperAdmin) {
       if (userAppIds.length === 0) return res.status(200).json({ success: true, reviews: [] });
       query = query.in('app_id', userAppIds);
@@ -266,13 +267,18 @@ async function handleListReviews(res: VercelResponse, client: SupabaseClient, fi
         const pattern = `%${term}%`;
         query = query.or(`title.ilike.${pattern},body.ilike.${pattern},user_name.ilike.${pattern}`);
     }
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data, error, count } = await query.range(from, to);
+    let data, error, count;
+    if (fetchAll) {
+        ({ data, error, count } = await query);
+    } else {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        ({ data, error, count } = await query.range(from, to));
+    }
     if (error) {
         return res.status(500).json({ error: error.message, details: error });
     }
-    return res.status(200).json({ success: true, reviews: data, total: count ?? 0, page, pageSize });
+    return res.status(200).json({ success: true, reviews: data, total: count ?? data?.length ?? 0, page, pageSize, mode: fetchAll ? 'full' : 'paged' });
 }
 
 async function handleAddApp(res: VercelResponse, app: any, client: SupabaseClient) {
