@@ -1,11 +1,11 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Download, Search, RefreshCw, CheckCircle2 } from 'lucide-react';
 import ReviewCard from '../components/ReviewCard';
 import DateRangePicker, { DateRange } from '../components/DateRangePicker';
 import UserHistoryModal from '../components/UserHistoryModal';
 import { MOCK_REVIEWS, MOCK_APPS } from '../constants';
-import { fetchReviewsFromDB, fetchAppsFromDB, isSupabaseConfigured } from '../services/supabaseService';
+import { isSupabaseConfigured } from '../services/supabaseService';
 import { Review, AppProduct, ReviewStatus } from '../types';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -59,6 +59,7 @@ const ReviewList: React.FC = () => {
   const [filterRating, setFilterRating] = useState<number | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<ReviewStatus | 'all'>('all'); // New Status Filter
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   
   // Date Range State
   const defaultFrom = new Date();
@@ -71,52 +72,68 @@ const ReviewList: React.FC = () => {
 
   // Pagination
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const pageSize = 50;
+  const [totalCount, setTotalCount] = useState(0);
 
   // User History Modal State
   const [historyModalUser, setHistoryModalUser] = useState<string | null>(null);
 
-  const loadData = async () => {
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  const loadData = useCallback(async (pageToLoad: number) => {
     setIsLoading(true);
     
     try {
       if (isSupabaseConfigured()) {
         const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
         const [reviewsRes, appsRes] = await Promise.all([
-          axios.post('/api/admin', { action: 'list_reviews' }, { headers: authHeader }),
+          axios.post('/api/admin', { 
+            action: 'list_reviews',
+            filters: {
+              app_id: selectedApp === 'all' ? undefined : selectedApp,
+              rating: filterRating === 'all' ? undefined : filterRating,
+              status: filterStatus === 'all' ? undefined : filterStatus,
+              search: debouncedSearch || undefined,
+              startDate: dateRange.from ? dateRange.from.toISOString() : undefined,
+              endDate: dateRange.to ? dateRange.to.toISOString() : undefined
+            },
+            page: pageToLoad,
+            pageSize
+          }, { headers: authHeader }),
           axios.post('/api/admin', { action: 'list_apps' }, { headers: authHeader })
         ]);
 
         const dbReviews = reviewsRes.data?.reviews || [];
         const dbApps = appsRes.data?.apps || [];
-        if (dbReviews.length > 0) {
-          setReviews(dbReviews);
-          setApps(dbApps);
-          setUsingMockData(false);
-        } else {
-          setReviews(MOCK_REVIEWS);
-          setApps(dbApps.length > 0 ? dbApps : MOCK_APPS);
-          setUsingMockData(true);
-        }
+        setReviews(dbReviews);
+        setApps(dbApps);
+        setTotalCount(typeof reviewsRes.data?.total === 'number' ? reviewsRes.data.total : dbReviews.length);
+        setUsingMockData(false);
       } else {
         setReviews(MOCK_REVIEWS);
         setApps(MOCK_APPS);
+        setTotalCount(MOCK_REVIEWS.length);
         setUsingMockData(true);
       }
+      setPage(pageToLoad);
     } catch (e) {
       console.error("Failed to load DB data", e);
       // 在连接 Supabase 失败时不要再展示 mock，直接显示空/真实状态
       setReviews([]);
       setApps([]);
+      setTotalCount(0);
       setUsingMockData(false);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session, selectedApp, filterRating, filterStatus, debouncedSearch, dateRange, pageSize]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(1);
+  }, [loadData]);
 
   const handleReply = async (reviewIdStr: string | number, content: string) => {
     if (!isAdmin) {
@@ -151,35 +168,7 @@ const ReviewList: React.FC = () => {
     }
   };
 
-  const filteredReviews = useMemo(() => {
-    return reviews.filter(r => {
-      const matchApp = selectedApp === 'all' || r.app_id === selectedApp;
-      const matchRating = filterRating === 'all' || r.rating === filterRating;
-      
-      // Default to 'pending' if status undefined in mock/legacy data
-      const currentStatus = r.status || 'pending';
-      const matchStatus = filterStatus === 'all' || currentStatus === filterStatus;
-
-      const matchSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          r.body.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.topics?.some(t => t.includes(searchTerm.toLowerCase())) ||
-                          r.user_name.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      let matchTime = true;
-      if (dateRange.from && dateRange.to) {
-        const rDate = new Date(r.created_at_store);
-        matchTime = rDate >= dateRange.from && rDate <= dateRange.to;
-      }
-
-      return matchApp && matchRating && matchStatus && matchSearch && matchTime;
-    });
-  }, [reviews, selectedApp, filterRating, filterStatus, searchTerm, dateRange]);
-
-  const pagedReviews = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    return filteredReviews.slice(start, end);
-  }, [filteredReviews, page]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
     <div className="p-8 max-w-5xl mx-auto h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -203,7 +192,7 @@ const ReviewList: React.FC = () => {
         </div>
         <div className="flex items-center space-x-3">
           <button 
-            onClick={loadData}
+            onClick={() => loadData(page)}
             disabled={isLoading}
             className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
             title={t('reviews.refresh')}
@@ -211,8 +200,8 @@ const ReviewList: React.FC = () => {
             <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
-            onClick={() => exportToCsv(filteredReviews)}
-            disabled={filteredReviews.length === 0}
+            onClick={() => exportToCsv(reviews)}
+            disabled={reviews.length === 0}
             className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={16} />
@@ -285,8 +274,8 @@ const ReviewList: React.FC = () => {
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
-        ) : filteredReviews.length > 0 ? (
-          pagedReviews.map(review => {
+        ) : reviews.length > 0 ? (
+          reviews.map(review => {
             const app = apps.find(a => a.id === review.app_id);
             return (
               <ReviewCard 
@@ -311,19 +300,19 @@ const ReviewList: React.FC = () => {
         )}
       </div>
 
-      {filteredReviews.length > pageSize && (
+      {totalCount > pageSize && (
         <div className="flex justify-center items-center space-x-3 mt-6">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => loadData(Math.max(1, page - 1))}
             disabled={page === 1}
             className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white disabled:opacity-50"
           >
             Prev
           </button>
-          <span className="text-sm text-slate-600">{page} / {Math.ceil(filteredReviews.length / pageSize)}</span>
+          <span className="text-sm text-slate-600">{page} / {totalPages}</span>
           <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page >= Math.ceil(filteredReviews.length / pageSize)}
+            onClick={() => loadData(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
             className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white disabled:opacity-50"
           >
             Next

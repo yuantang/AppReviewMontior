@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleListAppsFromDb(res, client, userAppIds, isSuperAdmin);
     }
     else if (action === 'list_reviews') {
-        return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin);
+        return await handleListReviews(res, client, req.body?.filters, userAppIds, isSuperAdmin, req.body?.page, req.body?.pageSize);
     }
     else if (action === 'list_users') {
         // Allow admin/superadmin to view users
@@ -248,20 +248,31 @@ async function handleSetUserRole(res: VercelResponse, client: SupabaseClient, us
     return res.status(200).json({ success: true });
 }
 
-async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isSuperAdmin: boolean) {
-    let query = client.from('reviews').select('*').order('created_at_store', { ascending: false });
+async function handleListReviews(res: VercelResponse, client: SupabaseClient, filters: any, userAppIds: number[], isSuperAdmin: boolean, pageParam?: number, pageSizeParam?: number) {
+    const page = Math.max(1, Number(pageParam) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(pageSizeParam) || 50));
+    let query = client.from('reviews').select('*', { count: 'exact' }).order('created_at_store', { ascending: false });
     if (!isSuperAdmin) {
       if (userAppIds.length === 0) return res.status(200).json({ success: true, reviews: [] });
       query = query.in('app_id', userAppIds);
     }
     if (filters?.app_id) query = query.eq('app_id', filters.app_id);
     if (filters?.rating) query = query.eq('rating', filters.rating);
-    // 返回全部满足条件的评论，不再限制 200，前端自行筛选/分页
-    const { data, error } = await query;
+    if (filters?.status) query = query.eq('status', filters.status);
+    if (filters?.startDate) query = query.gte('created_at_store', filters.startDate);
+    if (filters?.endDate) query = query.lte('created_at_store', filters.endDate);
+    if (filters?.search) {
+        const term = filters.search.replace(/%/g, '\\%').replace(/_/g, '\\_');
+        const pattern = `%${term}%`;
+        query = query.or(`title.ilike.${pattern},body.ilike.${pattern},user_name.ilike.${pattern}`);
+    }
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error, count } = await query.range(from, to);
     if (error) {
         return res.status(500).json({ error: error.message, details: error });
     }
-    return res.status(200).json({ success: true, reviews: data });
+    return res.status(200).json({ success: true, reviews: data, total: count ?? 0, page, pageSize });
 }
 
 async function handleAddApp(res: VercelResponse, app: any, client: SupabaseClient) {
