@@ -252,31 +252,60 @@ async function handleListReviews(res: VercelResponse, client: SupabaseClient, fi
     const fetchAll = mode === 'full';
     const page = Math.max(1, Number(pageParam) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(pageSizeParam) || 50));
-    let query = client.from('reviews').select('*', { count: fetchAll ? 'exact' : 'estimated' }).order('created_at_store', { ascending: false });
-    if (!isSuperAdmin) {
-      if (userAppIds.length === 0) return res.status(200).json({ success: true, reviews: [] });
-      query = query.in('app_id', userAppIds);
-    }
-    if (filters?.app_id) query = query.eq('app_id', filters.app_id);
-    if (filters?.rating) query = query.eq('rating', filters.rating);
-    if (filters?.status) query = query.eq('status', filters.status);
-    if (filters?.startDate) query = query.gte('created_at_store', filters.startDate);
-    if (filters?.endDate) query = query.lte('created_at_store', filters.endDate);
-    if (filters?.search) {
-        const term = filters.search.replace(/%/g, '\\%').replace(/_/g, '\\_');
-        const pattern = `%${term}%`;
-        query = query.or(`title.ilike.${pattern},body.ilike.${pattern},user_name.ilike.${pattern}`);
-    }
-    let data, error, count;
+    
+    const buildBaseQuery = () => {
+      let query = client.from('reviews').select('*', { count: 'exact' }).order('created_at_store', { ascending: false });
+      if (!isSuperAdmin) {
+        if (userAppIds.length === 0) return { query: null, error: null };
+        query = query.in('app_id', userAppIds);
+      }
+      if (filters?.app_id) query = query.eq('app_id', filters.app_id);
+      if (filters?.rating) query = query.eq('rating', filters.rating);
+      if (filters?.status) query = query.eq('status', filters.status);
+      if (filters?.startDate) query = query.gte('created_at_store', filters.startDate);
+      if (filters?.endDate) query = query.lte('created_at_store', filters.endDate);
+      if (filters?.search) {
+          const term = filters.search.replace(/%/g, '\\%').replace(/_/g, '\\_');
+          const pattern = `%${term}%`;
+          query = query.or(`title.ilike.${pattern},body.ilike.${pattern},user_name.ilike.${pattern}`);
+      }
+      return { query, error: null };
+    };
+
+    const base = buildBaseQuery();
+    if (!base.query) return res.status(200).json({ success: true, reviews: [] });
+
+    let data: any[] | null = null;
+    let error = null;
+    let count: number | null = null;
+
     if (fetchAll) {
-        ({ data, error, count } = await query);
+      // Supabase 默认返回最多 1k，循环分页拿全量
+      const chunkSize = 1000;
+      let from = 0;
+      let all: any[] = [];
+      let total: number | null = null;
+      while (true) {
+        const { data: chunk, error: err, count: c } = await buildBaseQuery().query!.range(from, from + chunkSize - 1);
+        if (err) {
+          error = err;
+          break;
+        }
+        if (total === null) total = c ?? 0;
+        all = all.concat(chunk || []);
+        if (!chunk || chunk.length < chunkSize) break;
+        from += chunkSize;
+      }
+      data = all;
+      count = total ?? all.length;
     } else {
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-        ({ data, error, count } = await query.range(from, to));
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      ({ data, error, count } = await base.query.range(from, to));
     }
+
     if (error) {
-        return res.status(500).json({ error: error.message, details: error });
+        return res.status(500).json({ error: (error as any).message || 'Query error', details: error });
     }
     return res.status(200).json({ success: true, reviews: data, total: count ?? data?.length ?? 0, page, pageSize, mode: fetchAll ? 'full' : 'paged' });
 }
